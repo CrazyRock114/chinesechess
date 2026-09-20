@@ -1,0 +1,26 @@
+{
+  "name": "chinese-chess-3d",
+  "version": "1.1.0",
+  "description": "Three.js 3D 中國象棋 · 包含純邏輯規則引擎、開局庫與 AI 搜索引擎",
+  "type": "module",
+  "scripts": {
+    "test": "node test.mjs && node ai-test.mjs",
+    "test:rules": "node test.mjs",
+    "test:ai": "node ai-test.mjs",
+    "test:fuzz": "node fuzz.mjs",
+    "bump-cache": "node tools/bump-cache.mjs",
+    "bump-cache:check": "node tools/bump-cache.mjs --check",
+    "start": "npx serve .",
+    "dev": "npx serve ."
+  },
+  "keywords": [
+    "chinese-chess",
+    "xiangqi",
+    "threejs",
+    "webgl",
+    "chess-ai",
+    "opening-book"
+  ],
+  "author": "Will 保哥",
+  "license": "MIT"
+}
