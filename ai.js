@@ -4,8 +4,8 @@
 // 難度：easy（淺層＋隨機）/ medium（3 層）/ hard（迭代加深至 6 層，殘局更深）
 // 加強：置換表、killer/history 排序、將軍延伸、應將靜態搜索、重複局面偵測
 // ============================================================
-import { ROWS, COLS, RED, BLACK, getMoves, legalMoves, kingsFacing, kingPos, inCheck, hashBoard } from './game.js?v=cc7eb2518b';
-import { getOpeningMove } from './opening-book.js?v=cc7eb2518b';
+import { ROWS, COLS, RED, BLACK, getMoves, legalMoves, kingsFacing, kingPos, inCheck, hashBoard } from './game.js?v=82d4648f05';
+import { getOpeningMove } from './opening-book.js?v=82d4648f05';
 
 const INF = 1e9;
 const MATE = 100000;

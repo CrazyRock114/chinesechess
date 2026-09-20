@@ -9,11 +9,18 @@ export const COLS = 9;
 export const RED = 'red';
 export const BLACK = 'black';
 
-const RED_NAMES =   { K: '帥', A: '仕', B: '相', N: '傌', R: '俥', C: '炮', P: '兵' };
-const BLACK_NAMES = { K: '將', A: '士', B: '象', N: '馬', R: '車', C: '砲', P: '卒' };
+const RED_NAMES_HANT =   { K: '帥', A: '仕', B: '相', N: '傌', R: '俥', C: '炮', P: '兵' };
+const BLACK_NAMES_HANT = { K: '將', A: '士', B: '象', N: '馬', R: '車', C: '砲', P: '卒' };
 
-export function name(side, type) {
-  return (side === RED ? RED_NAMES : BLACK_NAMES)[type];
+const RED_NAMES_HANS =   { K: '帅', A: '仕', B: '相', N: '马', R: '车', C: '炮', P: '兵' };
+const BLACK_NAMES_HANS = { K: '将', A: '士', B: '象', N: '马', R: '车', C: '炮', P: '卒' };
+
+export function name(side, type, lang = 'zh-Hant') {
+  const isHans = lang === 'zh-Hans';
+  const map = isHans
+    ? (side === RED ? RED_NAMES_HANS : BLACK_NAMES_HANS)
+    : (side === RED ? RED_NAMES_HANT : BLACK_NAMES_HANT);
+  return map[type];
 }
 
 export function initialBoard() {
@@ -264,12 +271,13 @@ export function repetitionVerdict(records, key) {
 const CN = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
 
 /** 生成傳統棋譜，例如「傌八進七」「炮二平五」「兵五進一」「前俥進二」 */
-export function notation(b, from, to) {
+export function notation(b, from, to, lang = 'zh-Hant') {
   const p = b[from.r][from.c];
   if (!p) return '?';
   const side = p.side;
+  const isHans = lang === 'zh-Hans';
   const fileOf = (c) => (side === RED ? 9 - c : c + 1);
-  const head = name(side, p.type);
+  const head = name(side, p.type, lang);
   const f1 = CN[fileOf(from.c)];
 
   // 檢查同縱列是否有相同兵種（如雙車、雙炮、雙馬、多兵）
@@ -292,32 +300,35 @@ export function notation(b, from, to) {
       sameColRows.sort((a, b2) => a - b2);
     }
     const idx = sameColRows.indexOf(from.r);
+    const backChar = isHans ? '后' : '後';
     let prefix = '前';
     if (sameColRows.length === 2) {
-      prefix = idx === 0 ? '前' : '後';
+      prefix = idx === 0 ? '前' : backChar;
     } else if (sameColRows.length === 3) {
-      prefix = idx === 0 ? '前' : (idx === 1 ? '中' : '後');
+      prefix = idx === 0 ? '前' : (idx === 1 ? '中' : backChar);
     } else {
-      const prefixes = ['前', '二', '三', '四', '後'];
-      prefix = idx === sameColRows.length - 1 ? '後' : (prefixes[idx] || '前');
+      const prefixes = isHans ? ['前', '二', '三', '四', backChar] : ['前', '二', '三', '四', '後'];
+      prefix = idx === sameColRows.length - 1 ? backChar : (prefixes[idx] || '前');
     }
     tag1 = prefix;
     tag2 = head;
   }
 
   const advancing = (side === RED) ? to.r > from.r : to.r < from.r;
+  const advAction = isHans ? '进' : '進';
+  const act = advancing ? advAction : '退';
 
   if (from.c === to.c) {
     // 直線進退：格數
     const steps = Math.abs(to.r - from.r);
-    return `${tag1}${tag2}${advancing ? '進' : '退'}${CN[steps]}`;
+    return `${tag1}${tag2}${act}${CN[steps]}`;
   }
   if (to.r === from.r) {
     // 橫走：到達線路號
     return `${tag1}${tag2}平${CN[fileOf(to.c)]}`;
   }
   // 斜走（傌象仕）：到達線路號
-  return `${tag1}${tag2}${advancing ? '進' : '退'}${CN[fileOf(to.c)]}`;
+  return `${tag1}${tag2}${act}${CN[fileOf(to.c)]}`;
 }
 
 // ---------------- FEN (Forsyth-Edwards Notation) ----------------

@@ -245,5 +245,18 @@ ok(loadedEndgame.board[0][4].type === 'K' && loadedEndgame.board[0][4].side === 
 ok(loadedEndgame.board[9][4].type === 'K' && loadedEndgame.board[9][4].side === BLACK, '殘局黑將在(9,4)');
 ok(loadedEndgame.board[1][4].type === 'P' && loadedEndgame.board[1][4].side === BLACK, '殘局黑卒在(1,4)');
 
+// ---------- 簡體中文記譜與棋子名測試 ----------
+ok(name(RED, 'K', 'zh-Hans') === '帅', '簡體紅帥為 帅');
+ok(name(BLACK, 'K', 'zh-Hans') === '将', '簡體黑將為 将');
+ok(name(RED, 'N', 'zh-Hans') === '马', '簡體紅傌為 马');
+ok(name(BLACK, 'R', 'zh-Hans') === '车', '簡體黑車為 车');
+
+const bHans = initialBoard();
+ok(notation(bHans, { r: 0, c: 1 }, { r: 2, c: 2 }, 'zh-Hans') === '马八进七', '簡體: 马八进七');
+ok(notation(bHans, { r: 2, c: 7 }, { r: 2, c: 4 }, 'zh-Hans') === '炮二平五', '簡體: 炮二平五');
+ok(notation(bDup, { r: 4, c: 1 }, { r: 6, c: 1 }, 'zh-Hans') === '前车进二', '簡體: 前车进二');
+ok(notation(bDup, { r: 1, c: 1 }, { r: 1, c: 4 }, 'zh-Hans') === '后车平五', '簡體: 后车平五');
+ok(notation(b3Pawns, { r: 3, c: 4 }, { r: 4, c: 4 }, 'zh-Hans') === '后兵进一', '簡體: 后兵进一');
+
 console.log(failed === 0 ? '\n全部通過 ✔' : `\n${failed} 項失敗 ✘`);
 process.exit(failed === 0 ? 0 : 1);

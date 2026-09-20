@@ -8,7 +8,21 @@ import {
   initialBoard, legalMoves, applyMove, inCheck,
   hasAnyLegalMove, name, notation, hashBoard, repetitionVerdict,
   toFEN, loadFEN,
-} from './game.js?v=cc7eb2518b';
+} from './game.js?v=82d4648f05';
+import { LANG_HANT, LANG_HANS, I18N } from './i18n.js?v=82d4648f05';
+
+function loadLangPref() {
+  try {
+    const saved = localStorage.getItem('xiangqi.lang');
+    if (saved === LANG_HANT || saved === LANG_HANS) return saved;
+    if (navigator.language && (navigator.language.startsWith('zh-CN') || navigator.language.startsWith('zh-Hans'))) {
+      return LANG_HANS;
+    }
+  } catch {}
+  return LANG_HANT;
+}
+let currentLang = loadLangPref();
+const t = (k) => (I18N[currentLang] || I18N[LANG_HANT])[k] ?? k;
 
 // ---------------- 常數 ----------------
 const CELL = 1;
@@ -82,7 +96,7 @@ rim.position.set(-8, 4, -6);
 scene.add(rim);
 
 // ---------------- 棋盘 ----------------
-function makeBoardTexture() {
+function makeBoardTexture(lang = currentLang) {
   const cell = 100, pad = 60;
   const W = (COLS - 1) * cell + pad * 2, H = (ROWS - 1) * cell + pad * 2;
   const cv = document.createElement('canvas');
@@ -157,8 +171,9 @@ function makeBoardTexture() {
     g.fillText(ch, 0, 3);
     g.restore();
   };
-  vChar('楚', 264); vChar('河', 196);          // 畫面下方直書「楚河」
-  vChar('漢', W - 196); vChar('界', W - 264);  // 畫面上方直書「漢界」
+  const dict = I18N[lang] || I18N[LANG_HANT];
+  vChar(dict.riverChu, 264); vChar(dict.riverHe, 196);          // 畫面下方直書「楚河」
+  vChar(dict.riverHan, W - 196); vChar(dict.riverJie, W - 264);  // 畫面上方直書「漢界」或「汉界」
 
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -222,7 +237,7 @@ sharedPieceMats();
 
 const PIECE_GEO = new THREE.CylinderGeometry(0.4, 0.46, PIECE_H, 48);
 
-function makeTopTexture(side, type) {
+function makeTopTexture(side, type, lang = currentLang) {
   const s = 256;
   const cv = document.createElement('canvas');
   cv.width = s; cv.height = s;
@@ -248,13 +263,8 @@ function makeTopTexture(side, type) {
   g.font = '900 118px "Kaiti SC","STKaiti","KaiTi","Noto Serif TC",serif';
   g.textAlign = 'center';
   g.textBaseline = 'middle';
-  // 棋子文字朝向持有者：紅方在原點側（畫面下方），黑方在遠端（畫面上方）
-  if (side === BLACK) {
-    g.translate(s / 2, s / 2);
-    g.rotate(Math.PI);
-    g.translate(-s / 2, -s / 2);
-  }
-  g.fillText(name(side, type), s / 2, s / 2 + 8);
+  // 所有棋子字樣均正向繪製，旋轉棋盤時由 3D 旋轉實時對齊相機，始終朝向自己
+  g.fillText(name(side, type, lang), s / 2, s / 2 + 8);
 
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -263,11 +273,11 @@ function makeTopTexture(side, type) {
 }
 
 const topMatCache = new Map();
-function getTopMaterial(side, type) {
-  const key = `${side}_${type}`;
+function getTopMaterial(side, type, lang = currentLang) {
+  const key = `${lang}_${side}_${type}`;
   let mat = topMatCache.get(key);
   if (!mat) {
-    const tex = makeTopTexture(side, type);
+    const tex = makeTopTexture(side, type, lang);
     mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.5, metalness: 0.05 });
     topMatCache.set(key, mat);
   }
@@ -279,7 +289,7 @@ function makePiece(piece, r, c) {
     PIECE_GEO,
     [
       sideMat,
-      getTopMaterial(piece.side, piece.type),
+      getTopMaterial(piece.side, piece.type, currentLang),
       botMat,
     ]
   );
@@ -288,6 +298,8 @@ function makePiece(piece, r, c) {
   m.userData = { piece, r, c };
   const p = to3D(r, c);
   m.position.set(p.x, Y0, p.z);
+  const azimuth = Math.atan2(camera.position.x - controls.target.x, camera.position.z - controls.target.z);
+  m.rotation.y = -(azimuth + Math.PI / 2);
   return m;
 }
 
@@ -443,7 +455,7 @@ let aiMoveStart = 0;
 let aiWorker = null;
 let aiModule = null;   // Worker 不可用時的主執行緒後備
 try {
-  aiWorker = new Worker(new URL('./ai-worker.js?v=cc7eb2518b', import.meta.url), { type: 'module' });
+  aiWorker = new Worker(new URL('./ai-worker.js?v=82d4648f05', import.meta.url), { type: 'module' });
   aiWorker.onmessage = (e) => onAIResult(e.data);
   aiWorker.onerror = () => {
     aiWorker = null;
@@ -465,7 +477,7 @@ function requestAIMove() {
   if (aiWorker) {
     aiWorker.postMessage(payload);
   } else {
-    (aiModule ??= import('./ai.js?v=cc7eb2518b')).then(({ findBestMove }) => {
+    (aiModule ??= import('./ai.js?v=82d4648f05')).then(({ findBestMove }) => {
       setTimeout(() => {
         if (token !== aiToken) return;
         onAIResult({ token, result: findBestMove(payload.board, payload.side, payload.level, payload.recent) });
@@ -518,6 +530,9 @@ window.__chess = {
   undo,
   doMove,
   camera, renderer, scene, controls,
+  get currentLang() { return currentLang; },
+  setLanguage,
+  updateUIStrings,
 };
 
 const turnText = document.getElementById('turnText');
@@ -531,37 +546,52 @@ const banner = document.getElementById('checkBanner');
 const overlay = document.getElementById('overlay');
 const btnUndo = document.getElementById('btnUndo');
 
+let moveLogs = []; // { side, textHant, textHans }
+
 function refreshHUD() {
   const showSide = over && winner ? winner : turn;
   const isRed = showSide === RED;
   if (over) {
-    turnText.textContent = winner == null ? '和局' : winner === RED ? '紅方勝' : '黑方勝';
+    turnText.textContent = winner == null ? t('turnDraw') : winner === RED ? t('turnRedWin') : t('turnBlackWin');
   } else if (aiThinking) {
-    turnText.textContent = 'AI 思考中…';
+    turnText.textContent = t('turnThinking');
   } else if (isAI()) {
-    turnText.textContent = isRed ? '輪到你了' : 'AI 行棋';
+    turnText.textContent = isRed ? t('turnYou') : t('turnAI');
   } else {
-    turnText.textContent = isRed ? '紅方行棋' : '黑方行棋';
+    turnText.textContent = isRed ? t('turnRed') : t('turnBlack');
   }
   const col = isRed ? '#c05345' : '#8b93a1';
   turnDot.style.background = col;
   turnDot.style.boxShadow = `0 0 10px ${col}`;
   turnBox.classList.toggle('thinking', aiThinking && !over);
-  capRedEl.innerHTML = capturedBy[RED].map((p) => `<span class="chip ${p.side}">${name(p.side, p.type)}</span>`).join('') || '<em>—</em>';
-  capBlackEl.innerHTML = capturedBy[BLACK].map((p) => `<span class="chip ${p.side}">${name(p.side, p.type)}</span>`).join('') || '<em>—</em>';
+  capRedEl.innerHTML = capturedBy[RED].map((p) => `<span class="chip ${p.side}">${name(p.side, p.type, currentLang)}</span>`).join('') || '<em>—</em>';
+  capBlackEl.innerHTML = capturedBy[BLACK].map((p) => `<span class="chip ${p.side}">${name(p.side, p.type, currentLang)}</span>`).join('') || '<em>—</em>';
   btnUndo.disabled = history.length === 0 || busy || aiThinking;
 }
 
-function addLog(nota, side) {
+function addLog(textHant, textHans, side) {
+  moveLogs.push({ side, textHant, textHans });
+  if (moveLogs.length > 200) moveLogs.shift();
+  rebuildLog();
+}
+
+function rebuildLog() {
+  logEl.innerHTML = '';
+  if (!moveLogs.length) {
+    logEmpty.style.display = '';
+    return;
+  }
   logEmpty.style.display = 'none';
-  const li = document.createElement('li');
-  const dot = document.createElement('span');
-  dot.className = 'side ' + side;
-  dot.textContent = side === RED ? '紅' : '黑';
-  li.appendChild(dot);
-  li.appendChild(document.createTextNode(' ' + nota));
-  logEl.appendChild(li);
-  while (logEl.children.length > 200) logEl.removeChild(logEl.firstChild);
+  for (const entry of moveLogs) {
+    const li = document.createElement('li');
+    const dot = document.createElement('span');
+    dot.className = 'side ' + entry.side;
+    dot.textContent = entry.side === RED ? t('sideRed') : t('sideBlack');
+    li.appendChild(dot);
+    const txt = currentLang === LANG_HANS ? entry.textHans : entry.textHant;
+    li.appendChild(document.createTextNode(' ' + txt));
+    logEl.appendChild(li);
+  }
   logEl.scrollTop = logEl.scrollHeight;
 }
 
@@ -629,8 +659,8 @@ function newGame() {
   stopConfetti();
   overlay.classList.add('hidden');
   banner.classList.add('hidden');
-  logEl.innerHTML = '';
-  logEmpty.style.display = '';
+  moveLogs = [];
+  rebuildLog();
   syncLastMoveMark();
   buildScene();
   refreshHUD();
@@ -655,21 +685,23 @@ function resetTo(customBoard, turnSide) {
   stopConfetti();
   overlay.classList.add('hidden');
   banner.classList.add('hidden');
-  logEl.innerHTML = '';
-  logEmpty.style.display = '';
+  moveLogs = [];
+  rebuildLog();
   syncLastMoveMark();
   buildScene();
   refreshHUD();
 }
 
 function animateCapture(m, done) {
+  m.userData.capturing = true;
   const y0 = m.position.y;
   const s0 = m.scale.x;
+  const rotY0 = m.rotation.y;
   tween(280, (k) => {
     const s = Math.max(0.06, s0 * (1 - 0.92 * k));
     m.scale.set(s, s, s);
     m.position.y = y0 * (1 - k) + 0.02;
-    m.rotation.y = k * 1.1;
+    m.rotation.y = rotY0 + k * 1.1;
   }, done);
 }
 
@@ -677,11 +709,12 @@ function doMove(from, to) {
   const p = pieceAt(from.r, from.c);
   const cap = pieceAt(to.r, to.c);
   const captured = board[to.r][to.c];
-  const nota = notation(board, from, to);
+  const notaHant = notation(board, from, to, LANG_HANT);
+  const notaHans = notation(board, from, to, LANG_HANS);
   applyMove(board, from, to);
   p.userData.r = to.r;
   p.userData.c = to.c;
-  history.push({ from, to, captured, nota });
+  history.push({ from, to, captured, notaHant, notaHans, side: turn });
   posHistory.push(hashBoard(board));
   syncLastMoveMark();
   clearSelection();
@@ -701,17 +734,17 @@ function doMove(from, to) {
         scene.remove(cap);
         const i = pieces.indexOf(cap);
         if (i >= 0) pieces.splice(i, 1);
-        finishMove(nota, captured);
+        finishMove(notaHant, notaHans, captured);
       });
     } else {
-      finishMove(nota, captured);
+      finishMove(notaHant, notaHans, captured);
     }
   });
 }
 
-function finishMove(nota, captured) {
+function finishMove(notaHant, notaHans, captured) {
   if (captured) capturedBy[turn].push(captured);
-  addLog(nota, turn);
+  addLog(notaHant, notaHans, turn);
   const mover = turn;
   turn = turn === RED ? BLACK : RED;
   busy = false;
@@ -784,7 +817,7 @@ function undo() {
   undoPly();
   // 人機模式：連 AI 那一步一起退，回到玩家回合
   if (isAI() && turn === AI_SIDE && history.length) undoPly();
-  addLog('悔棋', turn);
+  addLog('悔棋', '悔棋', turn);
   if (over) { over = false; winner = null; }
   stopConfetti();
   overlay.classList.add('hidden');
@@ -901,43 +934,65 @@ function showGameOver(endReason) {
   const pvp = !isAI();
   const draw = winner == null;
   const playerWin = !pvp && !draw && winner !== AI_SIDE;
+  const diffKey = mode;
+  const dLabel = (t('diffLabels') || {})[diffKey] || '';
   const d = pvp ? null : DIFF[mode];
   const plies = Math.max(1, history.length); // 棋譜著法數
   const secs = Math.max(1, Math.round((Date.now() - gameStartTime) / 1000));
   const caps = pvp ? capturedBy[winner ?? RED].length : capturedBy[RED].length;
   const pure = undoCount === 0; // 全程零悔棋：純度勳章
-  const reasonChars = draw ? '和棋' : endReason; // 戰績卡紅印：將死/困斃/長將/和棋
-  const winLabel = winner === RED ? '紅方' : '黑方';
+  const isZhHans = currentLang === LANG_HANS;
+
+  const reasonMap = {
+    '將死': t('reasonCheckmate'),
+    '困斃': t('reasonStalemate'),
+    '長將': t('reasonPerpetual'),
+    '三次重複局面': t('reasonRepetition'),
+    '雙方長將': t('reasonBothPerp'),
+  };
+  const reasonChars = draw ? (isZhHans ? '和棋' : '和棋') : (reasonMap[endReason] || endReason);
+  const winSideLabel = winner === RED ? t('sideRed') : t('sideBlack');
+  const winLabel = `${winSideLabel}方`;
   const celebrate = !draw && (pvp || playerWin);
 
   let title, sub, badge, cardTitle, cardSub, shareText;
   if (draw) {
-    title = '和局';
-    sub = pvp ? '棋逢敵手，握手言和！' : '勢均力敵，不分勝負！';
-    badge = pvp ? '雙人對弈' : `人機對弈 ・ ${d.label}`;
-    cardTitle = '和局';
-    cardSub = `${pvp ? '雙人對弈' : `「${d.label}」AI`} ・ 鏖戰 ${plies} 著${pure ? ' ・ 零悔棋' : ''}`;
-    shareText = `我們在 3D 中國象棋鏖戰 ${plies} 著，弈和不分勝負！來對弈一局：${SITE_URL}`;
+    title = t('ovDraw');
+    sub = pvp ? t('ovDrawSubPvP') : t('ovDrawSubAI');
+    badge = pvp ? t('ovPvPBadge') : `${isZhHans ? '人机对弈' : '人機對弈'} ・ ${dLabel}`;
+    cardTitle = t('ovDraw');
+    cardSub = pvp ? t('ovPvPSub')(plies, pure) : t('ovAISub')(dLabel, plies, pure);
+    shareText = isZhHans
+      ? `我们在 3D 中国象棋鏖战 ${plies} 着，弈和不分胜负！来对弈一局：${SITE_URL}`
+      : `我們在 3D 中國象棋鏖戰 ${plies} 著，弈和不分勝負！來對弈一局：${SITE_URL}`;
   } else if (pvp) {
-    title = `${winLabel}勝`;
-    sub = '棋逢敵手，精彩對弈！';
-    badge = '雙人對弈';
-    cardTitle = `${winLabel}勝出`;
-    cardSub = `雙人對弈 ・ 鏖戰 ${plies} 著${pure ? ' ・ 零悔棋' : ''}`;
-    shareText = `我們在 3D 中國象棋鏖戰 ${plies} 著，${winLabel}獲勝！來對弈一局：${SITE_URL}`;
+    title = `${winLabel}${t('ovWinPvP')}`;
+    sub = isZhHans ? '棋逢敌手，精彩对弈！' : '棋逢敵手，精彩對弈！';
+    badge = t('ovPvPBadge');
+    cardTitle = `${winLabel}${t('ovWinPvP')}`;
+    cardSub = t('ovPvPSub')(plies, pure);
+    shareText = isZhHans
+      ? `我们在 3D 中国象棋鏖战 ${plies} 着，${winLabel}获胜！来对弈一局：${SITE_URL}`
+      : `我們在 3D 中國象棋鏖戰 ${plies} 著，${winLabel}獲勝！來對弈一局：${SITE_URL}`;
   } else if (playerWin) {
-    title = d.winTitle;
-    sub = d.winSub;
-    badge = `人機對弈 ・ ${d.label}`;
-    cardTitle = d.winTitle.replace('！', '');
-    cardSub = `戰勝「${d.label}」AI ・ ${plies} 著${pure ? ' ・ 零悔棋' : ''}`;
+    title = t('ovWinTitle')(diffKey);
+    sub = t('ovWinSub')(diffKey);
+    badge = `${isZhHans ? '人机对弈' : '人機對弈'} ・ ${dLabel}`;
+    cardTitle = title.replace('！', '');
+    cardSub = isZhHans
+      ? `战胜“${dLabel}”AI ・ ${plies} 着${pure ? ' ・ 零悔棋' : ''}`
+      : `戰勝「${dLabel}」AI ・ ${plies} 著${pure ? ' ・ 零悔棋' : ''}`;
     shareText = pure
-      ? `我在 3D 中國象棋全程零悔棋、${plies} 著戰勝「${d.label}」AI 🏆 不服來戰：${SITE_URL}`
-      : `我在 3D 中國象棋以 ${plies} 著戰勝「${d.label}」AI 🏆 不服來戰：${SITE_URL}`;
+      ? (isZhHans
+          ? `我在 3D 中国象棋全程零悔棋、${plies} 着战胜“${dLabel}”AI 🏆 不服来战：${SITE_URL}`
+          : `我在 3D 中國象棋全程零悔棋、${plies} 著戰勝「${dLabel}」AI 🏆 不服來戰：${SITE_URL}`)
+      : (isZhHans
+          ? `我在 3D 中国象棋以 ${plies} 着战胜“${dLabel}”AI 🏆 不服来战：${SITE_URL}`
+          : `我在 3D 中國象棋以 ${plies} 著戰勝「${dLabel}」AI 🏆 不服來戰：${SITE_URL}`);
   } else {
-    title = '惜敗…';
-    sub = '勝敗乃兵家常事，捲土重來！';
-    badge = `人機對弈 ・ ${d.label}`;
+    title = t('ovLoseTitle');
+    sub = t('ovLoseSub');
+    badge = `${isZhHans ? '人机对弈' : '人機對弈'} ・ ${dLabel}`;
   }
 
   lastResult = { pvp, playerWin, draw, d, plies, secs, caps, undoCount, pure, reasonChars, cardTitle, cardSub, shareText };
@@ -958,11 +1013,16 @@ function showGameOver(endReason) {
   stCaps.textContent = caps;
   stUndo.textContent = undoCount;
   stUndo.classList.toggle('pure', pure);
+  const perpReason = celebrate
+    ? (isZhHans ? '对方“长将”判负' : '對方「長將」判負')
+    : (isZhHans ? '“长将”判负' : '「長將」判負');
+  const winReason = isZhHans ? `以“${reasonChars}”取胜` : `以「${reasonChars}」取勝`;
+  const loseReason = isZhHans ? `遭“${reasonChars}”落败` : `遭「${reasonChars}」落敗`;
   ovReason.textContent = draw
-    ? `${endReason}，判和`
+    ? `${reasonChars}，判和`
     : endReason === '長將'
-      ? (celebrate ? '對方「長將」判負' : '「長將」判負')
-      : (celebrate ? `以「${reasonChars}」取勝` : `遭「${reasonChars}」落敗`);
+      ? perpReason
+      : (celebrate ? winReason : loseReason);
   ovCard.classList.toggle('win', celebrate);
   ovCard.classList.toggle('lose', !celebrate && !draw);
   btnShare.style.display = celebrate ? '' : 'none';
@@ -1045,7 +1105,8 @@ async function buildShareCard(res) {
   cv.width = W; cv.height = H;
   const g = cv.getContext('2d');
   const serif = '"Kaiti SC","STKaiti","KaiTi","Noto Serif TC",serif';
-  const sans = '"PingFang TC","Microsoft JhengHei","Noto Sans TC",sans-serif';
+  const sans = '"PingFang SC","PingFang TC","Microsoft YaHei","Microsoft JhengHei","Noto Sans SC","Noto Sans TC",sans-serif';
+  const isZhHans = currentLang === LANG_HANS;
 
   // 底色 + 雙線描金外框
   const bg = g.createLinearGradient(0, 0, 0, H);
@@ -1063,7 +1124,7 @@ async function buildShareCard(res) {
   g.textAlign = 'center';
   g.fillStyle = '#9a8a74';
   g.font = `600 30px ${sans}`;
-  g.fillText('中 國 象 棋 ・ 3 D 對 弈', W / 2, 118);
+  g.fillText(isZhHans ? '中 国 象 棋 ・ 3 D 对 弈' : '中 國 象 棋 ・ 3 D 對 弈', W / 2, 118);
 
   g.fillStyle = '#f2c14e';
   g.shadowColor = 'rgba(242,193,78,0.45)';
@@ -1121,10 +1182,10 @@ async function buildShareCard(res) {
   g.lineTo(W - 120, 1052);
   g.stroke();
   const stats = [
-    [String(res.plies), '著法', false],
-    [fmtTime(res.secs), '用時', false],
-    [String(res.caps), '吃子', false],
-    [String(res.undoCount), '悔棋', res.pure], // 零悔棋以金色高亮
+    [String(res.plies), t('statRounds'), false],
+    [fmtTime(res.secs), t('statTime'), false],
+    [String(res.caps), t('statCaps'), false],
+    [String(res.undoCount), t('statUndo'), res.pure], // 零悔棋以金色高亮
   ];
   stats.forEach(([v, l, hi], i) => {
     const x = W / 2 + (i - 1.5) * 236;
@@ -1138,7 +1199,7 @@ async function buildShareCard(res) {
 
   g.fillStyle = '#d9a441';
   g.font = `700 34px ${sans}`;
-  g.fillText('不 服 來 戰', W / 2, 1262);
+  g.fillText(isZhHans ? '不 服 来 战' : '不 服 來 戰', W / 2, 1262);
   g.fillStyle = '#9a8a74';
   g.font = `500 28px ${sans}`;
   g.fillText('chinese-chess.gh.miniasp.com', W / 2, 1306);
@@ -1150,7 +1211,7 @@ async function shareResult() {
   if (!lastResult) return;
   btnShare.disabled = true;
   const orig = btnShare.textContent;
-  btnShare.textContent = '產生戰績圖…';
+  btnShare.textContent = t('btnShareGen');
   try {
     const cv = await buildShareCard(lastResult);
     const blob = await new Promise((res) => cv.toBlob(res, 'image/png'));
@@ -1158,7 +1219,7 @@ async function shareResult() {
     if (navigator.canShare?.({ files: [file] })) {
       try {
         await navigator.share({ files: [file], text: lastResult.shareText });
-        toast('分享成功，同喜同賀！🎉');
+        toast(t('toastShared'));
         return;
       } catch (err) {
         if (err && err.name === 'AbortError') return; // 使用者取消分享
@@ -1172,12 +1233,12 @@ async function shareResult() {
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
     try {
       await navigator.clipboard.writeText(lastResult.shareText);
-      toast('戰績圖已下載、炫耀文字已複製，貼上即可分享！');
+      toast(t('toastCardCopied'));
     } catch {
-      toast('戰績圖已下載，快分享你的勝利！');
+      toast(t('toastCardDownloaded'));
     }
   } catch {
-    toast('產生分享圖失敗，請再試一次');
+    toast(t('toastShareFail'));
   } finally {
     btnShare.disabled = false;
     btnShare.textContent = orig;
@@ -1196,7 +1257,7 @@ document.getElementById('btnNew').addEventListener('click', newGame);
 btnUndo.addEventListener('click', undo);
 document.getElementById('btnSound').addEventListener('click', (e) => {
   muted = !muted;
-  e.currentTarget.textContent = muted ? '音效：關' : '音效：開';
+  e.currentTarget.textContent = muted ? t('soundOff') : t('soundOn');
   e.currentTarget.setAttribute('aria-pressed', String(!muted));
 });
 // 「⋯」更多選單（小螢幕）：開合、點外處／Esc 關閉、玩法說明開關
@@ -1253,9 +1314,9 @@ document.addEventListener('keydown', (e) => {
 btnFenCopy.addEventListener('click', async () => {
   try {
     await navigator.clipboard.writeText(fenInput.value);
-    toast('FEN 已複製到剪貼簿！📋');
+    toast(t('fenCopiedToast'));
   } catch {
-    toast('請手動選取複製文字');
+    toast(t('fenCopyManual'));
   }
 });
 
@@ -1266,9 +1327,9 @@ btnFenLoad.addEventListener('click', () => {
     const { board: newB, turn: newTurn } = loadFEN(raw);
     resetTo(newB, newTurn);
     closeFenModal();
-    toast('已載入 FEN 局面！🎮');
+    toast(t('fenLoadedToast'));
   } catch (err) {
-    toast(`載入失敗：${err.message || 'FEN 格式無效'}`);
+    toast(t('fenFailedToast')(err.message || (currentLang === LANG_HANS ? 'FEN 格式无效' : 'FEN 格式無效')));
   }
 });
 function flyTo(pos, tgt, done) {
@@ -1304,10 +1365,10 @@ function cancelCameraTween() {
 
 // 「視角」按鈕：在多個預設機位之間循環切換
 const CAMERA_VIEWS = [
-  { label: '紅方', dist: 14.8, polar: 45, azimuth: -90, tgt: HOME_TGT },
-  { label: '黑方', dist: 14.8, polar: 45, azimuth: 90, tgt: new THREE.Vector3(0, -0.1, -0.2) },
-  { label: '側面', dist: 14.8, polar: 55, azimuth: 0, tgt: new THREE.Vector3(0, -0.1, 0.2) },
-  { label: '俯視', dist: 14.2, polar: 8, azimuth: -90, tgt: new THREE.Vector3(0, 0, 0.2) },
+  { labelHant: '紅方', labelHans: '红方', dist: 14.8, polar: 45, azimuth: -90, tgt: HOME_TGT },
+  { labelHant: '黑方', labelHans: '黑方', dist: 14.8, polar: 45, azimuth: 90, tgt: new THREE.Vector3(0, -0.1, -0.2) },
+  { labelHant: '側面', labelHans: '侧面', dist: 14.8, polar: 55, azimuth: 0, tgt: new THREE.Vector3(0, -0.1, 0.2) },
+  { labelHant: '俯視', labelHans: '俯视', dist: 14.2, polar: 8, azimuth: -90, tgt: new THREE.Vector3(0, 0, 0.2) },
 ];
 let viewIdx = 0;
 document.getElementById('btnView').addEventListener('click', () => {
@@ -1317,7 +1378,8 @@ document.getElementById('btnView').addEventListener('click', () => {
     .setFromSphericalCoords(v.dist, THREE.MathUtils.degToRad(v.polar), THREE.MathUtils.degToRad(v.azimuth))
     .add(v.tgt);
   flyTo(pos, v.tgt);
-  toast(`視角：${v.label}`);
+  const lbl = currentLang === LANG_HANS ? v.labelHans : v.labelHant;
+  toast(t('viewToast')(lbl));
 });
 
 // 固定視角：鎖定鏡頭後拖曳／滾輪都不再改變視角（Issue #2）
@@ -1325,7 +1387,7 @@ let viewLocked = false;
 const btnLock = document.getElementById('btnLock');
 function syncLockUI() {
   controls.enabled = !viewLocked;
-  document.getElementById('btnLockText').textContent = viewLocked ? '固定視角：開' : '固定視角：關';
+  document.getElementById('btnLockText').textContent = viewLocked ? t('lockOn') : t('lockOff');
   btnLock.setAttribute('aria-pressed', String(viewLocked));
   btnLock.classList.toggle('on', viewLocked);
 }
@@ -1397,12 +1459,120 @@ btnFull.addEventListener('click', async () => {
 });
 function syncFullBtn() {
   const on = !!fsElement();
-  btnFull.textContent = on ? '離開全螢幕' : '全螢幕';
+  btnFull.textContent = on ? t('fullOn') : t('fullOff');
   btnFull.setAttribute('aria-pressed', String(on));
 }
 document.addEventListener('fullscreenchange', syncFullBtn);
 document.addEventListener('webkitfullscreenchange', syncFullBtn);
 syncFullBtn();
+
+// ---------------- 多語言切換 (i18n) ----------------
+function updateUIStrings() {
+  document.documentElement.lang = currentLang;
+  const brandH1 = document.querySelector('.brand h1');
+  if (brandH1) brandH1.textContent = t('brandTitle');
+  const brandSub = document.querySelector('.brand .sub');
+  if (brandSub) brandSub.textContent = t('brandSub');
+
+  if (modeSel && modeSel.options.length >= 4) {
+    modeSel.options[0].textContent = t('modeEasy');
+    modeSel.options[1].textContent = t('modeMedium');
+    modeSel.options[2].textContent = t('modeHard');
+    modeSel.options[3].textContent = t('modePvP');
+  }
+
+  if (btnUndo) btnUndo.textContent = t('undo');
+  const btnNewFull = document.querySelector('#btnNew .t-full');
+  if (btnNewFull) btnNewFull.textContent = t('newGameFull');
+  const btnNewShort = document.querySelector('#btnNew .t-short');
+  if (btnNewShort) btnNewShort.textContent = t('newGameShort');
+
+  const btnHelpEl = document.getElementById('btnHelp');
+  if (btnHelpEl) btnHelpEl.textContent = t('help');
+  const btnSoundEl = document.getElementById('btnSound');
+  if (btnSoundEl) btnSoundEl.textContent = muted ? t('soundOff') : t('soundOn');
+  const btnViewEl = document.getElementById('btnView');
+  if (btnViewEl) btnViewEl.textContent = t('view');
+  const btnFENEl = document.getElementById('btnFEN');
+  if (btnFENEl) btnFENEl.textContent = t('fenBtn');
+  const btnLangEl = document.getElementById('btnLang');
+  if (btnLangEl) {
+    btnLangEl.textContent = t('langBtn');
+    btnLangEl.title = currentLang === LANG_HANT ? '切換至簡體中文' : '切换至繁体中文';
+  }
+  syncFullBtn();
+  syncLockUI();
+
+  const capTitles = document.querySelectorAll('#left .tray h3');
+  if (capTitles[0]) capTitles[0].textContent = t('capRed');
+  if (capTitles[1]) capTitles[1].textContent = t('capBlack');
+
+  const helpPs = document.querySelectorAll('#left .help p');
+  if (helpPs[0]) helpPs[0].textContent = t('helpP1');
+  if (helpPs[1]) helpPs[1].textContent = t('helpP2');
+  if (helpPs[2]) helpPs[2].textContent = t('helpP3');
+  if (helpPs[3]) helpPs[3].textContent = t('helpP4');
+
+  const logHeader = document.querySelector('#right h3');
+  if (logHeader) logHeader.textContent = t('logTitle');
+  if (logEmpty) logEmpty.textContent = t('logEmpty');
+  if (banner) banner.textContent = t('checkBanner');
+
+  const fenTitleEl = document.getElementById('fenTitle');
+  if (fenTitleEl) fenTitleEl.textContent = t('fenTitle');
+  const fenDescEl = document.querySelector('.fenDesc');
+  if (fenDescEl) fenDescEl.textContent = t('fenDesc');
+  const fenLabelEl = document.querySelector('.fenGroup label');
+  if (fenLabelEl) fenLabelEl.textContent = t('fenLabel');
+  if (btnFenCopy) btnFenCopy.textContent = t('fenCopyBtn');
+  if (btnFenLoad) btnFenLoad.textContent = t('fenLoadBtn');
+
+  const statLabels = document.querySelectorAll('#ovStats .stat span');
+  if (statLabels[0]) statLabels[0].textContent = t('statRounds');
+  if (statLabels[1]) statLabels[1].textContent = t('statTime');
+  if (statLabels[2]) statLabels[2].textContent = t('statCaps');
+  if (statLabels[3]) statLabels[3].textContent = t('statUndo');
+  if (btnShare) btnShare.textContent = t('btnShare');
+  const btnAgainEl = document.getElementById('btnAgain');
+  if (btnAgainEl) btnAgainEl.textContent = t('btnAgain');
+}
+
+function setLanguage(lang) {
+  if (lang !== LANG_HANT && lang !== LANG_HANS) return;
+  currentLang = lang;
+  try {
+    localStorage.setItem('xiangqi.lang', currentLang);
+  } catch {}
+
+  // 1. 更新 2D DOM 介面文字
+  updateUIStrings();
+
+  // 2. 更新棋盤楚河漢界貼圖
+  const oldBoardMap = boardMesh.material.map;
+  boardMesh.material.map = makeBoardTexture(currentLang);
+  boardMesh.material.needsUpdate = true;
+  if (oldBoardMap) oldBoardMap.dispose();
+
+  // 3. 更新棋子貼圖（替換 top material）
+  for (let i = 0; i < pieces.length; i++) {
+    const m = pieces[i];
+    const { side, type } = m.userData.piece;
+    m.material[1] = getTopMaterial(side, type, currentLang);
+    m.material[1].needsUpdate = true;
+  }
+
+  // 4. 重繪棋譜與 HUD
+  rebuildLog();
+  refreshHUD();
+}
+
+const btnLang = document.getElementById('btnLang');
+if (btnLang) {
+  btnLang.addEventListener('click', () => {
+    setLanguage(currentLang === LANG_HANT ? LANG_HANS : LANG_HANT);
+    closeHudMenu();
+  });
+}
 
 // ---------------- resize / loop ----------------
 function resize() {
@@ -1422,8 +1592,20 @@ function tick(now) {
     selRing.scale.set(s, s, 1);
   }
   if (!viewLocked) controls.update(); // 鎖定時不套用控制器更新，慣性晃動一併凍結
+
+  // 實時更新棋子文字朝向：旋轉棋盤時所有棋子的字始終朝向鏡頭/玩家
+  const azimuth = Math.atan2(camera.position.x - controls.target.x, camera.position.z - controls.target.z);
+  const targetRotY = -(azimuth + Math.PI / 2);
+  for (let i = 0; i < pieces.length; i++) {
+    const p = pieces[i];
+    if (!p.userData.capturing) {
+      p.rotation.y = targetRotY;
+    }
+  }
+
   renderer.render(scene, camera);
 }
 renderer.setAnimationLoop(tick);
 
+updateUIStrings();
 newGame();
