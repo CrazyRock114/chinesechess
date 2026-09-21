@@ -19,7 +19,7 @@ import { dirname, join } from 'node:path';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 // 參與雜湊的本地檔案（內容任一變動 → 版本號改變）
-const ASSETS = ['css/style.css', 'main.js', 'game.js', 'ai.js', 'ai-worker.js', 'opening-book.js', 'i18n.js'];
+const ASSETS = ['css/style.css', 'main.js', 'game.js', 'ai.js', 'ai-worker.js', 'opening-book.js', 'i18n.js', 'commentary.js'];
 
 // 去掉既有 ?v= 後再計算雜湊 → 同內容重複執行不會改寫（冪等）
 const normalized = ASSETS.map((p) => readFileSync(join(root, p), 'utf8').replace(/\?v=[0-9a-f]+/g, ''));
@@ -35,6 +35,13 @@ const RULES = [
     [/(\.\/game\.js)(\?v=[0-9a-f]+)?(?=['"])/g, `$1${V}`],
     [/(\.\/ai-worker\.js)(\?v=[0-9a-f]+)?(?=['"])/g, `$1${V}`],
     [/(\.\/ai\.js)(\?v=[0-9a-f]+)?(?=['"])/g, `$1${V}`],
+    [/(\.\/i18n\.js)(\?v=[0-9a-f]+)?(?=['"])/g, `$1${V}`],
+    [/(\.\/commentary\.js)(\?v=[0-9a-f]+)?(?=['"])/g, `$1${V}`],
+  ]],
+  ['commentary.js', [
+    [/(\.\/game\.js)(\?v=[0-9a-f]+)?(?=['"])/g, `$1${V}`],
+    [/(\.\/ai\.js)(\?v=[0-9a-f]+)?(?=['"])/g, `$1${V}`],
+    [/(\.\/opening-book\.js)(\?v=[0-9a-f]+)?(?=['"])/g, `$1${V}`],
     [/(\.\/i18n\.js)(\?v=[0-9a-f]+)?(?=['"])/g, `$1${V}`],
   ]],
   ['ai-worker.js', [

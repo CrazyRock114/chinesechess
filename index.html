@@ -68,7 +68,7 @@
   "sameAs": ["https://github.com/doggy8088/chinese-chess"]
 }
 </script>
-<link rel="stylesheet" href="./css/style.css?v=82d4648f05">
+<link rel="stylesheet" href="./css/style.css?v=a5d20a54ea">
 <script type="importmap">
 {
   "imports": {
@@ -93,9 +93,12 @@
         <option value="pvp">雙人對弈</option>
       </select>
       <button id="btnUndo" type="button">悔棋</button>
+      <button id="btnHint" type="button" title="獲取 AI 大師指導推薦著法">AI 指導</button>
       <button id="btnNew" type="button"><span class="t-full">新對局</span><span class="t-short">新局</span></button>
       <button id="btnMore" type="button" aria-haspopup="true" aria-expanded="false" title="更多設定" aria-label="更多設定">⋯</button>
       <div id="hudMore">
+        <button id="btnMobileComm" type="button" title="檢視 AI 實時解說與棋譜">AI 解說 / 棋譜</button>
+        <button id="btnVoice" type="button" title="開啟/關閉語音解說播報">語音：關</button>
         <button id="btnHelp" type="button" aria-pressed="false">玩法說明</button>
         <button id="btnSound" type="button" aria-pressed="true">音效：開</button>
         <button id="btnView" type="button" title="循環切換：紅方 → 黑方 → 側面 → 俯視">視角</button>
@@ -140,9 +143,25 @@
     </div>
 
     <aside id="right">
-      <h3>棋譜</h3>
-      <ol id="log"></ol>
-      <p id="logEmpty">尚無著法，紅方先行。</p>
+      <div class="right-tabs">
+        <button id="tabCommBtn" class="tab-btn active" type="button">AI 解說</button>
+        <button id="tabLogBtn" class="tab-btn" type="button">棋譜</button>
+      </div>
+
+      <div id="panelComm" class="tab-panel active">
+        <div class="comm-header">
+          <span id="commEvalBadge" class="eval-badge">勢均力敵</span>
+          <button id="btnVoiceRight" class="voice-btn" type="button" title="切換語音解說">🔊 語音：關</button>
+        </div>
+        <div id="commFeed" class="comm-feed">
+          <div id="commEmpty" class="comm-empty">對局開始，AI 棋評將為你即時解說每一步棋。</div>
+        </div>
+      </div>
+
+      <div id="panelLog" class="tab-panel">
+        <ol id="log"></ol>
+        <p id="logEmpty">尚無著法，紅方先行。</p>
+      </div>
     </aside>
   </main>
 
@@ -187,9 +206,34 @@
     </div>
   </div>
 
+  <div id="hintModal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="hintBadge">
+    <div class="card" id="hintCard">
+      <div class="hintHeader">
+        <div class="hintBadge" id="hintBadge">🎯 AI 大師指導</div>
+        <button id="btnHintClose" type="button" class="icon-btn" aria-label="關閉">✕</button>
+      </div>
+      <div class="hintBody">
+        <div class="hintMoveWrap">
+          <span class="hintMoveLabel" id="hintMoveLabel">推薦著法</span>
+          <h2 id="hintMoveText">炮二平五</h2>
+        </div>
+        <div id="hintTacticTitle" class="hintTacticTitle">【當頭炮（中炮局）】</div>
+        <p id="hintRationale" class="hintRationale">符合經典棋譜定式。能夠高效展開主力兵力，佔據中心要道並制約對方陣型。</p>
+        <div class="hintScoreRow">
+          <span class="hintScoreLabel" id="hintScoreLabel">局勢評估：</span>
+          <span id="hintScoreText" class="hintScoreText">紅方微優 (+0.8)</span>
+        </div>
+      </div>
+      <div class="hintActions">
+        <button id="btnHintPlay" type="button" class="primary">一鍵行棋 ⚡</button>
+        <button id="btnHintDismiss" type="button">我知道了</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" class="hidden" role="status"></div>
 </div>
 
-<script type="module" src="./main.js?v=82d4648f05"></script>
+<script type="module" src="./main.js?v=a5d20a54ea"></script>
 </body>
 </html>

@@ -180,17 +180,162 @@ main { flex: 1; display: flex; min-height: 0; }
 #stage canvas { display: block; }
 
 aside {
-  width: 232px;
   flex: none;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
   padding: 16px 14px;
   background: var(--panel);
   overflow-y: auto;
 }
-#left { border-right: 1px solid var(--line); }
-#right { border-left: 1px solid var(--line); }
+#left { width: 220px; border-right: 1px solid var(--line); }
+#right { width: 268px; border-left: 1px solid var(--line); padding: 14px 12px; }
+
+/* ---------- 右側欄頁籤與解說面板 ---------- */
+.right-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+  flex: none;
+}
+.tab-btn {
+  flex: 1;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel2);
+  color: var(--muted);
+  cursor: pointer;
+  letter-spacing: 1px;
+  transition: all 0.15s;
+}
+.tab-btn:hover { color: var(--text); background: #33281d; }
+.tab-btn.active {
+  color: var(--gold);
+  border-color: rgba(217, 164, 65, 0.6);
+  background: rgba(217, 164, 65, 0.12);
+  box-shadow: 0 0 10px rgba(217, 164, 65, 0.15);
+}
+
+.tab-panel {
+  display: none;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.tab-panel.active { display: flex; }
+
+.comm-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex: none;
+}
+.eval-badge {
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(217, 164, 65, 0.12);
+  border: 1px solid rgba(217, 164, 65, 0.35);
+  color: var(--gold);
+  white-space: nowrap;
+}
+.voice-btn {
+  font-size: 11.5px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel2);
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.voice-btn.on {
+  color: #55df88;
+  border-color: rgba(85, 223, 136, 0.5);
+  background: rgba(85, 223, 136, 0.12);
+}
+
+.comm-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  flex: 1;
+  padding-right: 2px;
+}
+.comm-empty {
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+  text-align: center;
+  padding: 24px 10px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+}
+.comm-card {
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 9px 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  animation: cardin 0.25s ease both;
+  transition: border-color 0.15s;
+}
+.comm-card:hover { border-color: rgba(217, 164, 65, 0.4); }
+.comm-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+}
+.comm-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.comm-card-num {
+  font-weight: 700;
+  color: var(--gold);
+  font-size: 11px;
+}
+.comm-card-tag {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.tag-CHECK { background: rgba(255, 100, 50, 0.25); color: #ff9166; border: 1px solid rgba(255, 100, 50, 0.5); }
+.tag-CAPTURE { background: rgba(220, 50, 50, 0.2); color: #ff8888; border: 1px solid rgba(220, 50, 50, 0.4); }
+.tag-OPENING { background: rgba(217, 164, 65, 0.2); color: #eed080; border: 1px solid rgba(217, 164, 65, 0.4); }
+.tag-ATTACK { background: rgba(70, 160, 255, 0.2); color: #8ec3ff; border: 1px solid rgba(70, 160, 255, 0.4); }
+.tag-DEFENSE { background: rgba(80, 200, 120, 0.2); color: #8cedb3; border: 1px solid rgba(80, 200, 120, 0.4); }
+.tag-TACTIC { background: rgba(180, 140, 255, 0.2); color: #cfb8ff; border: 1px solid rgba(180, 140, 255, 0.4); }
+.comm-card-title {
+  font-weight: 700;
+  font-size: 12.5px;
+  color: #fff;
+  letter-spacing: 0.5px;
+}
+.comm-card-body {
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: #dfd4c0;
+  word-break: break-word;
+}
+.comm-card-foot {
+  display: flex;
+  justify-content: flex-end;
+  font-size: 11px;
+  color: var(--muted);
+}
 
 aside h3 {
   font-size: 12px;
@@ -510,6 +655,113 @@ aside h3 {
 }
 .fenActions .primary:hover { background: linear-gradient(180deg, #f7d17a, #e2ad4a); }
 
+/* ---------- AI 大師指導彈窗 ---------- */
+#hintModal {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 8, 5, 0.65);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  animation: fadein 0.2s ease both;
+}
+#hintCard {
+  width: min(92vw, 420px);
+  background: var(--panel);
+  border: 1px solid rgba(217, 164, 65, 0.45);
+  border-radius: 18px;
+  padding: 24px 26px 22px;
+  text-align: left;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.65), 0 0 24px rgba(217, 164, 65, 0.15);
+  animation: cardin 0.28s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+.hintHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.hintBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--gold);
+  background: rgba(217, 164, 65, 0.15);
+  border: 1px solid rgba(217, 164, 65, 0.35);
+  padding: 4px 12px;
+  border-radius: 999px;
+  letter-spacing: 1px;
+}
+.hintMoveWrap {
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px;
+  text-align: center;
+  margin-bottom: 12px;
+}
+.hintMoveLabel {
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: var(--muted);
+  display: block;
+  margin-bottom: 4px;
+}
+#hintMoveText {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--gold);
+  letter-spacing: 3px;
+  margin: 0;
+}
+.hintTacticTitle {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 6px;
+  letter-spacing: 0.5px;
+}
+.hintRationale {
+  font-size: 13px;
+  line-height: 1.7;
+  color: #ded2be;
+  margin-bottom: 14px;
+}
+.hintScoreRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  margin-bottom: 18px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+}
+.hintScoreLabel { color: var(--muted); }
+.hintScoreText { color: var(--gold); font-weight: 600; }
+.hintActions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+.hintActions button { padding: 9px 18px; font-size: 13.5px; }
+.hintActions .primary {
+  background: linear-gradient(180deg, #f0c463, #d9a441);
+  border-color: #b98a2f;
+  color: #241a0c;
+  font-weight: 700;
+}
+.hintActions .primary:hover {
+  background: linear-gradient(180deg, #f7d17a, #e2ad4a);
+}
+
+#btnMobileComm { display: none; }
+
 /* ---------- 提示浮層 ---------- */
 #toast {
   position: fixed;
@@ -537,6 +789,24 @@ aside h3 {
   /* 棋盤置頂居中，吃子列移到棋盤下方，說明收進選單 */
   #stage { order: 1; flex: 1; }
   #right { display: none; }
+  #right.show-comm {
+    display: flex !important;
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    top: 54px;
+    bottom: max(60px, env(safe-area-inset-bottom));
+    z-index: 65;
+    background: rgba(23, 19, 16, 0.96);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7);
+    width: auto;
+    max-height: none;
+  }
+  #btnMobileComm { display: inline-flex; }
   h1 { font-size: 15px; letter-spacing: 3px; }
   .brand .sub { display: none; }
 

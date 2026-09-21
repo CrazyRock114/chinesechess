@@ -8,8 +8,16 @@ import {
   initialBoard, legalMoves, applyMove, inCheck,
   hasAnyLegalMove, name, notation, hashBoard, repetitionVerdict,
   toFEN, loadFEN,
-} from './game.js?v=82d4648f05';
-import { LANG_HANT, LANG_HANS, I18N } from './i18n.js?v=82d4648f05';
+} from './game.js?v=a5d20a54ea';
+import { LANG_HANT, LANG_HANS, I18N } from './i18n.js?v=a5d20a54ea';
+import {
+  generateCommentary,
+  getGuidance,
+  speakCommentary,
+  isVoiceEnabled,
+  setVoiceEnabled,
+  formatScore,
+} from './commentary.js?v=a5d20a54ea';
 
 function loadLangPref() {
   try {
@@ -298,8 +306,7 @@ function makePiece(piece, r, c) {
   m.userData = { piece, r, c };
   const p = to3D(r, c);
   m.position.set(p.x, Y0, p.z);
-  const azimuth = Math.atan2(camera.position.x - controls.target.x, camera.position.z - controls.target.z);
-  m.rotation.y = -(azimuth + Math.PI / 2);
+  m.rotation.y = Math.atan2(camera.position.z - controls.target.z, controls.target.x - camera.position.x);
   return m;
 }
 
@@ -311,6 +318,41 @@ const selRing = new THREE.Mesh(
 selRing.rotation.x = -Math.PI / 2;
 selRing.visible = false;
 scene.add(selRing);
+
+// AI 大師指導提示標記 (Hint Markers)
+const hintFromRing = new THREE.Mesh(
+  new THREE.RingGeometry(0.46, 0.62, 48),
+  new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.95, side: THREE.DoubleSide, depthWrite: false })
+);
+hintFromRing.rotation.x = -Math.PI / 2;
+hintFromRing.position.y = 0.022;
+hintFromRing.renderOrder = 6;
+hintFromRing.visible = false;
+scene.add(hintFromRing);
+
+const hintToRing = new THREE.Mesh(
+  new THREE.RingGeometry(0.2, 0.58, 48),
+  new THREE.MeshBasicMaterial({ color: 0x06b6d4, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false })
+);
+hintToRing.rotation.x = -Math.PI / 2;
+hintToRing.position.y = 0.022;
+hintToRing.renderOrder = 6;
+hintToRing.visible = false;
+scene.add(hintToRing);
+
+function showHintMarkers(from, to) {
+  const p1 = to3D(from.r, from.c);
+  const p2 = to3D(to.r, to.c);
+  hintFromRing.position.set(p1.x, 0.022, p1.z);
+  hintToRing.position.set(p2.x, 0.022, p2.z);
+  hintFromRing.visible = true;
+  hintToRing.visible = true;
+}
+
+function hideHintMarkers() {
+  hintFromRing.visible = false;
+  hintToRing.visible = false;
+}
 
 // 最後一步標記（起點淡、終點深）
 function mkLastMark(opacity) {
@@ -455,7 +497,7 @@ let aiMoveStart = 0;
 let aiWorker = null;
 let aiModule = null;   // Worker 不可用時的主執行緒後備
 try {
-  aiWorker = new Worker(new URL('./ai-worker.js?v=82d4648f05', import.meta.url), { type: 'module' });
+  aiWorker = new Worker(new URL('./ai-worker.js?v=a5d20a54ea', import.meta.url), { type: 'module' });
   aiWorker.onmessage = (e) => onAIResult(e.data);
   aiWorker.onerror = () => {
     aiWorker = null;
@@ -477,7 +519,7 @@ function requestAIMove() {
   if (aiWorker) {
     aiWorker.postMessage(payload);
   } else {
-    (aiModule ??= import('./ai.js?v=82d4648f05')).then(({ findBestMove }) => {
+    (aiModule ??= import('./ai.js?v=a5d20a54ea')).then(({ findBestMove }) => {
       setTimeout(() => {
         if (token !== aiToken) return;
         onAIResult({ token, result: findBestMove(payload.board, payload.side, payload.level, payload.recent) });
@@ -546,7 +588,182 @@ const banner = document.getElementById('checkBanner');
 const overlay = document.getElementById('overlay');
 const btnUndo = document.getElementById('btnUndo');
 
+const tabCommBtn = document.getElementById('tabCommBtn');
+const tabLogBtn = document.getElementById('tabLogBtn');
+const panelComm = document.getElementById('panelComm');
+const panelLog = document.getElementById('panelLog');
+const commEvalBadge = document.getElementById('commEvalBadge');
+const btnVoiceRight = document.getElementById('btnVoiceRight');
+const btnVoice = document.getElementById('btnVoice');
+const commFeed = document.getElementById('commFeed');
+const commEmpty = document.getElementById('commEmpty');
+const btnMobileComm = document.getElementById('btnMobileComm');
+
+const btnHint = document.getElementById('btnHint');
+const hintModal = document.getElementById('hintModal');
+const btnHintClose = document.getElementById('btnHintClose');
+const btnHintDismiss = document.getElementById('btnHintDismiss');
+const btnHintPlay = document.getElementById('btnHintPlay');
+const hintMoveText = document.getElementById('hintMoveText');
+const hintTacticTitle = document.getElementById('hintTacticTitle');
+const hintRationale = document.getElementById('hintRationale');
+const hintScoreText = document.getElementById('hintScoreText');
+
 let moveLogs = []; // { side, textHant, textHans }
+let commentaryLogs = []; // { moveNum, side, notaHant, notaHans, titleHant, titleHans, commHant, commHans, tag, scoreTextHant, scoreTextHans }
+
+function addCommentaryEntry(entry) {
+  commentaryLogs.push(entry);
+  if (commentaryLogs.length > 200) commentaryLogs.shift();
+  rebuildCommentary();
+  const isHans = currentLang === LANG_HANS;
+  speakCommentary(isHans ? entry.commHans : entry.commHant, currentLang);
+}
+
+function rebuildCommentary() {
+  if (!commFeed) return;
+  commFeed.innerHTML = '';
+  if (!commentaryLogs.length) {
+    if (commEmpty) {
+      commEmpty.style.display = '';
+      commFeed.appendChild(commEmpty);
+    }
+    if (commEvalBadge) {
+      commEvalBadge.textContent = currentLang === LANG_HANS ? '势均力敌' : '勢均力敵';
+    }
+    return;
+  }
+  if (commEmpty) commEmpty.style.display = 'none';
+  const isHans = currentLang === LANG_HANS;
+  for (const item of commentaryLogs) {
+    const card = document.createElement('div');
+    card.className = 'comm-card';
+
+    const head = document.createElement('div');
+    head.className = 'comm-card-head';
+
+    const meta = document.createElement('div');
+    meta.className = 'comm-card-meta';
+
+    const num = document.createElement('span');
+    num.className = 'comm-card-num';
+    num.textContent = `#${item.moveNum}`;
+
+    const sideBadge = document.createElement('span');
+    sideBadge.className = 'side ' + item.side;
+    sideBadge.textContent = item.side === RED ? t('sideRed') : t('sideBlack');
+
+    const nota = document.createElement('b');
+    nota.textContent = isHans ? item.notaHans : item.notaHant;
+
+    meta.appendChild(num);
+    meta.appendChild(sideBadge);
+    meta.appendChild(nota);
+
+    const tag = document.createElement('span');
+    tag.className = 'comm-card-tag tag-' + (item.tag || 'TACTIC');
+    tag.textContent = isHans ? item.titleHans : item.titleHant;
+
+    head.appendChild(meta);
+    head.appendChild(tag);
+
+    const body = document.createElement('div');
+    body.className = 'comm-card-body';
+    body.textContent = isHans ? item.commHans : item.commHant;
+
+    card.appendChild(head);
+    card.appendChild(body);
+    commFeed.appendChild(card);
+  }
+
+  const last = commentaryLogs[commentaryLogs.length - 1];
+  if (last && commEvalBadge) {
+    commEvalBadge.textContent = isHans ? last.scoreTextHans : last.scoreTextHant;
+  }
+  commFeed.scrollTop = commFeed.scrollHeight;
+}
+
+function switchRightTab(tab) {
+  if (!tabCommBtn || !tabLogBtn) return;
+  if (tab === 'comm') {
+    tabCommBtn.classList.add('active');
+    tabLogBtn.classList.remove('active');
+    panelComm?.classList.add('active');
+    panelLog?.classList.remove('active');
+  } else {
+    tabCommBtn.classList.remove('active');
+    tabLogBtn.classList.add('active');
+    panelComm?.classList.remove('active');
+    panelLog?.classList.add('active');
+  }
+}
+tabCommBtn?.addEventListener('click', () => switchRightTab('comm'));
+tabLogBtn?.addEventListener('click', () => switchRightTab('log'));
+
+function toggleVoice() {
+  setVoiceEnabled(!isVoiceEnabled());
+  const on = isVoiceEnabled();
+  btnVoiceRight?.classList.toggle('on', on);
+  if (btnVoiceRight) btnVoiceRight.textContent = (on ? '🔊 ' : '🔇 ') + t(on ? 'voiceOn' : 'voiceOff');
+  if (btnVoice) btnVoice.textContent = t(on ? 'voiceOn' : 'voiceOff');
+  showToast(on ? (currentLang === LANG_HANS ? '语音解说：已开启 🔊' : '語音解說：已開啟 🔊') : (currentLang === LANG_HANS ? '语音解说：已关闭 🔇' : '語音解說：已關閉 🔇'));
+}
+btnVoiceRight?.addEventListener('click', toggleVoice);
+btnVoice?.addEventListener('click', () => { toggleVoice(); closeHudMenu(); });
+
+btnMobileComm?.addEventListener('click', () => {
+  const rightEl = document.getElementById('right');
+  rightEl?.classList.toggle('show-comm');
+  closeHudMenu();
+});
+
+let currentHint = null;
+function openHint() {
+  if (over) {
+    showToast(t('hintGameOver'));
+    return;
+  }
+  if (busy || aiThinking) {
+    showToast(t('hintWaitingAI'));
+    return;
+  }
+  if (isAI() && turn === AI_SIDE) {
+    showToast(t('hintWaitingAI'));
+    return;
+  }
+
+  const hint = getGuidance(board, turn, currentLang, history);
+  if (!hint) {
+    showToast(t('hintNoMove'));
+    return;
+  }
+
+  currentHint = hint;
+  if (hintMoveText) hintMoveText.textContent = hint.nota;
+  if (hintTacticTitle) hintTacticTitle.textContent = hint.title;
+  if (hintRationale) hintRationale.textContent = hint.rationale;
+  if (hintScoreText) hintScoreText.textContent = hint.scoreText;
+  if (hintModal) hintModal.classList.remove('hidden');
+
+  showHintMarkers(hint.from, hint.to);
+}
+
+function closeHint() {
+  if (hintModal) hintModal.classList.add('hidden');
+}
+
+btnHint?.addEventListener('click', openHint);
+btnHintClose?.addEventListener('click', closeHint);
+btnHintDismiss?.addEventListener('click', closeHint);
+btnHintPlay?.addEventListener('click', () => {
+  closeHint();
+  if (currentHint) {
+    const { from, to } = currentHint;
+    hideHintMarkers();
+    currentHint = null;
+    doMove(from, to);
+  }
+});
 
 function refreshHUD() {
   const showSide = over && winner ? winner : turn;
@@ -660,7 +877,11 @@ function newGame() {
   overlay.classList.add('hidden');
   banner.classList.add('hidden');
   moveLogs = [];
+  commentaryLogs = [];
   rebuildLog();
+  rebuildCommentary();
+  hideHintMarkers();
+  if (hintModal) hintModal.classList.add('hidden');
   syncLastMoveMark();
   buildScene();
   refreshHUD();
@@ -686,7 +907,11 @@ function resetTo(customBoard, turnSide) {
   overlay.classList.add('hidden');
   banner.classList.add('hidden');
   moveLogs = [];
+  commentaryLogs = [];
   rebuildLog();
+  rebuildCommentary();
+  hideHintMarkers();
+  if (hintModal) hintModal.classList.add('hidden');
   syncLastMoveMark();
   buildScene();
   refreshHUD();
@@ -706,9 +931,11 @@ function animateCapture(m, done) {
 }
 
 function doMove(from, to) {
+  hideHintMarkers();
   const p = pieceAt(from.r, from.c);
   const cap = pieceAt(to.r, to.c);
   const captured = board[to.r][to.c];
+  const prevBoard = board.map((row) => row.map((c) => (c ? { ...c } : null)));
   const notaHant = notation(board, from, to, LANG_HANT);
   const notaHans = notation(board, from, to, LANG_HANS);
   applyMove(board, from, to);
@@ -734,17 +961,54 @@ function doMove(from, to) {
         scene.remove(cap);
         const i = pieces.indexOf(cap);
         if (i >= 0) pieces.splice(i, 1);
-        finishMove(notaHant, notaHans, captured);
+        finishMove(notaHant, notaHans, captured, prevBoard, from, to);
       });
     } else {
-      finishMove(notaHant, notaHans, captured);
+      finishMove(notaHant, notaHans, captured, prevBoard, from, to);
     }
   });
 }
 
-function finishMove(notaHant, notaHans, captured) {
+function finishMove(notaHant, notaHans, captured, prevBoard, from, to) {
   if (captured) capturedBy[turn].push(captured);
   addLog(notaHant, notaHans, turn);
+
+  if (prevBoard && from && to) {
+    const commHant = generateCommentary({
+      prevBoard,
+      currBoard: board,
+      from,
+      to,
+      side: turn,
+      captured,
+      history,
+      lang: LANG_HANT,
+    });
+    const commHans = generateCommentary({
+      prevBoard,
+      currBoard: board,
+      from,
+      to,
+      side: turn,
+      captured,
+      history,
+      lang: LANG_HANS,
+    });
+    addCommentaryEntry({
+      moveNum: history.length,
+      side: turn,
+      notaHant,
+      notaHans,
+      titleHant: commHant.title,
+      titleHans: commHans.title,
+      commHant: commHant.comment,
+      commHans: commHans.comment,
+      tag: commHant.tag,
+      scoreTextHant: commHant.scoreText,
+      scoreTextHans: commHans.scoreText,
+    });
+  }
+
   const mover = turn;
   turn = turn === RED ? BLACK : RED;
   busy = false;
@@ -807,6 +1071,7 @@ function undoPly() {
     scene.add(cm);
     capturedBy[turn === RED ? BLACK : RED].pop();
   }
+  commentaryLogs.pop();
   turn = turn === RED ? BLACK : RED;
 }
 
@@ -818,6 +1083,9 @@ function undo() {
   // 人機模式：連 AI 那一步一起退，回到玩家回合
   if (isAI() && turn === AI_SIDE && history.length) undoPly();
   addLog('悔棋', '悔棋', turn);
+  rebuildCommentary();
+  hideHintMarkers();
+  if (hintModal) hintModal.classList.add('hidden');
   if (over) { over = false; winner = null; }
   stopConfetti();
   overlay.classList.add('hidden');
@@ -1535,6 +1803,29 @@ function updateUIStrings() {
   if (btnShare) btnShare.textContent = t('btnShare');
   const btnAgainEl = document.getElementById('btnAgain');
   if (btnAgainEl) btnAgainEl.textContent = t('btnAgain');
+
+  const btnHintEl = document.getElementById('btnHint');
+  if (btnHintEl) btnHintEl.textContent = t('hintBtn');
+  const tabCommBtnEl = document.getElementById('tabCommBtn');
+  if (tabCommBtnEl) tabCommBtnEl.textContent = t('tabCommentary');
+  const tabLogBtnEl = document.getElementById('tabLogBtn');
+  if (tabLogBtnEl) tabLogBtnEl.textContent = t('tabLog');
+  const btnVoiceEl = document.getElementById('btnVoice');
+  if (btnVoiceEl) btnVoiceEl.textContent = t(isVoiceEnabled() ? 'voiceOn' : 'voiceOff');
+  const btnVoiceRightEl = document.getElementById('btnVoiceRight');
+  if (btnVoiceRightEl) btnVoiceRightEl.textContent = (isVoiceEnabled() ? '🔊 ' : '🔇 ') + t(isVoiceEnabled() ? 'voiceOn' : 'voiceOff');
+  const commEmptyEl = document.getElementById('commEmpty');
+  if (commEmptyEl) commEmptyEl.textContent = t('commEmpty');
+  const hintBadgeEl = document.getElementById('hintBadge');
+  if (hintBadgeEl) hintBadgeEl.textContent = '🎯 ' + t('hintTitle');
+  const hintMoveLabelEl = document.getElementById('hintMoveLabel');
+  if (hintMoveLabelEl) hintMoveLabelEl.textContent = t('hintMoveLabel');
+  const hintScoreLabelEl = document.getElementById('hintScoreLabel');
+  if (hintScoreLabelEl) hintScoreLabelEl.textContent = t('evalLabel') + '：';
+  const btnHintPlayEl = document.getElementById('btnHintPlay');
+  if (btnHintPlayEl) btnHintPlayEl.textContent = t('hintPlayBtn') + ' ⚡';
+  const btnHintDismissEl = document.getElementById('btnHintDismiss');
+  if (btnHintDismissEl) btnHintDismissEl.textContent = t('hintCloseBtn');
 }
 
 function setLanguage(lang) {
@@ -1561,8 +1852,9 @@ function setLanguage(lang) {
     m.material[1].needsUpdate = true;
   }
 
-  // 4. 重繪棋譜與 HUD
+  // 4. 重繪棋譜、解說與 HUD
   rebuildLog();
+  rebuildCommentary();
   refreshHUD();
 }
 
@@ -1591,11 +1883,16 @@ function tick(now) {
     const s = 1 + Math.sin(now * 0.006) * 0.05;
     selRing.scale.set(s, s, 1);
   }
+  if (hintFromRing.visible) {
+    const s = 1 + Math.sin(now * 0.008) * 0.08;
+    hintFromRing.scale.set(s, s, 1);
+    const s2 = 1 + Math.cos(now * 0.008) * 0.08;
+    hintToRing.scale.set(s2, s2, 1);
+  }
   if (!viewLocked) controls.update(); // 鎖定時不套用控制器更新，慣性晃動一併凍結
 
   // 實時更新棋子文字朝向：旋轉棋盤時所有棋子的字始終朝向鏡頭/玩家
-  const azimuth = Math.atan2(camera.position.x - controls.target.x, camera.position.z - controls.target.z);
-  const targetRotY = -(azimuth + Math.PI / 2);
+  const targetRotY = Math.atan2(camera.position.z - controls.target.z, controls.target.x - camera.position.x);
   for (let i = 0; i < pieces.length; i++) {
     const p = pieces[i];
     if (!p.userData.capturing) {
