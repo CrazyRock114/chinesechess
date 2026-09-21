@@ -8,8 +8,8 @@ import {
   initialBoard, legalMoves, applyMove, inCheck,
   hasAnyLegalMove, name, notation, hashBoard, repetitionVerdict,
   toFEN, loadFEN,
-} from './game.js?v=a5d20a54ea';
-import { LANG_HANT, LANG_HANS, I18N } from './i18n.js?v=a5d20a54ea';
+} from './game.js?v=5630beac13';
+import { LANG_HANT, LANG_HANS, I18N } from './i18n.js?v=5630beac13';
 import {
   generateCommentary,
   getGuidance,
@@ -17,7 +17,7 @@ import {
   isVoiceEnabled,
   setVoiceEnabled,
   formatScore,
-} from './commentary.js?v=a5d20a54ea';
+} from './commentary.js?v=5630beac13';
 
 function loadLangPref() {
   try {
@@ -497,7 +497,7 @@ let aiMoveStart = 0;
 let aiWorker = null;
 let aiModule = null;   // Worker 不可用時的主執行緒後備
 try {
-  aiWorker = new Worker(new URL('./ai-worker.js?v=a5d20a54ea', import.meta.url), { type: 'module' });
+  aiWorker = new Worker(new URL('./ai-worker.js?v=5630beac13', import.meta.url), { type: 'module' });
   aiWorker.onmessage = (e) => onAIResult(e.data);
   aiWorker.onerror = () => {
     aiWorker = null;
@@ -519,7 +519,7 @@ function requestAIMove() {
   if (aiWorker) {
     aiWorker.postMessage(payload);
   } else {
-    (aiModule ??= import('./ai.js?v=a5d20a54ea')).then(({ findBestMove }) => {
+    (aiModule ??= import('./ai.js?v=5630beac13')).then(({ findBestMove }) => {
       setTimeout(() => {
         if (token !== aiToken) return;
         onAIResult({ token, result: findBestMove(payload.board, payload.side, payload.level, payload.recent) });
@@ -622,11 +622,13 @@ function addCommentaryEntry(entry) {
 
 function rebuildCommentary() {
   if (!commFeed) return;
-  commFeed.innerHTML = '';
+  const cards = commFeed.querySelectorAll('.comm-card');
+  cards.forEach((c) => c.remove());
   if (!commentaryLogs.length) {
     if (commEmpty) {
       commEmpty.style.display = '';
-      commFeed.appendChild(commEmpty);
+      commEmpty.textContent = t('commEmpty');
+      if (!commEmpty.parentNode) commFeed.appendChild(commEmpty);
     }
     if (commEvalBadge) {
       commEvalBadge.textContent = currentLang === LANG_HANS ? '势均力敌' : '勢均力敵';
@@ -732,7 +734,7 @@ function openHint() {
     return;
   }
 
-  const hint = getGuidance(board, turn, currentLang, history);
+  const hint = getGuidance(board, turn, currentLang, history, posHistory);
   if (!hint) {
     showToast(t('hintNoMove'));
     return;
@@ -750,16 +752,23 @@ function openHint() {
 
 function closeHint() {
   if (hintModal) hintModal.classList.add('hidden');
+  hideHintMarkers();
 }
 
 btnHint?.addEventListener('click', openHint);
 btnHintClose?.addEventListener('click', closeHint);
 btnHintDismiss?.addEventListener('click', closeHint);
+hintModal?.addEventListener('click', (e) => {
+  if (e.target === hintModal) closeHint();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && hintModal && !hintModal.classList.contains('hidden')) closeHint();
+});
 btnHintPlay?.addEventListener('click', () => {
+  const h = currentHint;
   closeHint();
-  if (currentHint) {
-    const { from, to } = currentHint;
-    hideHintMarkers();
+  if (h) {
+    const { from, to } = h;
     currentHint = null;
     doMove(from, to);
   }

@@ -4,149 +4,181 @@
 // 支援繁體中文 (zh-Hant) 與簡體中文 (zh-Hans)
 // ============================================================
 
-import { RED, BLACK, inCheck, legalMoves, notation } from './game.js?v=a5d20a54ea';
-import { evaluate, findBestMove } from './ai.js?v=a5d20a54ea';
-import { getOpeningMove } from './opening-book.js?v=a5d20a54ea';
-import { LANG_HANT, LANG_HANS } from './i18n.js?v=a5d20a54ea';
+import { RED, BLACK, inCheck, legalMoves, notation } from './game.js?v=5630beac13';
+import { evaluate, findBestMove } from './ai.js?v=5630beac13';
+import { getOpeningMove } from './opening-book.js?v=5630beac13';
+import { LANG_HANT, LANG_HANS } from './i18n.js?v=5630beac13';
 
 // ---------------- 開局定式名庫 ----------------
 const OPENINGS = [
   {
-    pattern: [
-      { side: RED, piece: 'C', to: [2, 4] },
-      { side: BLACK, piece: 'N', to: [7, 2] },
-      { side: RED, piece: 'N', to: [2, 2] },
-      { side: BLACK, piece: 'N', to: [7, 6] },
-    ],
+    length: 4,
     nameHant: '中炮對屏風馬',
     nameHans: '中炮对屏风马',
     descHant: '象棋最經典的攻守大局，紅方中炮攻勢剛猛，黑方雙馬盤護中卒固若金湯。',
     descHans: '象棋最经典的攻守大局，红方中炮攻势刚猛，黑方双马盘护中卒固若金汤。',
+    check: (h) => {
+      if (h.length !== 4) return false;
+      // 步1: 紅中炮
+      if (h[0].side !== RED || h[0].to.r !== 2 || h[0].to.c !== 4) return false;
+      // 步2: 黑馬進3或7
+      if (h[1].side !== BLACK || h[1].to.r !== 7 || (h[1].to.c !== 2 && h[1].to.c !== 6)) return false;
+      // 步3: 紅正馬
+      if (h[2].side !== RED || h[2].to.r !== 2 || (h[2].to.c !== 2 && h[2].to.c !== 6)) return false;
+      // 步4: 黑另一馬進（與步2不同列）
+      if (h[3].side !== BLACK || h[3].to.r !== 7 || (h[3].to.c !== 2 && h[3].to.c !== 6)) return false;
+      return h[3].to.c !== h[1].to.c;
+    },
   },
   {
-    pattern: [
-      { side: RED, piece: 'C', to: [2, 4] },
-      { side: BLACK, piece: 'C', to: [7, 4] },
-    ],
+    length: 2,
     nameHant: '順手炮局',
     nameHans: '顺手炮局',
     descHant: '鬥炮局的激烈開篇，雙方中炮針鋒相對，短兵相接，對攻節奏極快。',
     descHans: '斗炮局的激烈开篇，双方中炮针锋相对，短兵相接，对攻节奏极快。',
+    check: (h) => {
+      if (h.length !== 2) return false;
+      return (
+        h[0].side === RED && h[0].to.r === 2 && h[0].to.c === 4 &&
+        h[1].side === BLACK && h[1].to.r === 7 && h[1].to.c === 4
+      );
+    },
   },
   {
-    pattern: [
-      { side: RED, piece: 'C', to: [2, 4] },
-      { side: BLACK, piece: 'C', to: [7, 3] },
-    ],
+    length: 2,
     nameHant: '中炮對反宮馬',
     nameHans: '中炮对反宫马',
     descHant: '黑方士角置炮、雙馬夾士，兼具反擊與柔韌防守，招法靈活多變。',
     descHans: '黑方士角置炮、双马夹士，兼具反击与柔韧防守，招法灵活多变。',
+    check: (h) => {
+      if (h.length !== 2) return false;
+      return (
+        h[0].side === RED && h[0].to.r === 2 && h[0].to.c === 4 &&
+        h[1].side === BLACK && h[1].to.r === 7 && (h[1].to.c === 3 || h[1].to.c === 5)
+      );
+    },
   },
   {
-    pattern: [
-      { side: RED, piece: 'C', to: [2, 4] },
-      { side: BLACK, piece: 'N', to: [7, 6] },
-    ],
+    length: 2,
     nameHant: '中炮對單提馬',
     nameHans: '中炮对单提马',
     descHant: '黑方單馬起於肋線，另一馬保留邊路或隨機應變，暗藏反擊奇招。',
     descHans: '黑方单马起于肋线，另一马保留边路或随机应变，暗藏反击奇招。',
+    check: (h) => {
+      if (h.length !== 2) return false;
+      return (
+        h[0].side === RED && h[0].to.r === 2 && h[0].to.c === 4 &&
+        h[1].side === BLACK && h[1].to.r === 7 && (h[1].to.c === 2 || h[1].to.c === 6)
+      );
+    },
   },
   {
-    pattern: [
-      { side: RED, piece: 'C', to: [2, 4] },
-    ],
-    nameHant: '當頭炮（中炮局）',
-    nameHans: '当头炮（中炮局）',
-    descHant: '起手當頭炮，直逼黑方中卒與將門，鐵血進攻的主流定式。',
-    descHans: '起手当头炮，直逼黑方中卒与将门，铁血进攻的主流定式。',
-  },
-  {
-    pattern: [
-      { side: RED, piece: 'P', to: [4, 2] },
-      { side: BLACK, piece: 'C', to: [7, 4] },
-    ],
+    length: 2,
     nameHant: '仙人指路對卒底炮',
     nameHans: '仙人指路对卒底炮',
     descHant: '紅挺兵投石問路，黑方架卒底炮後發制人，剛柔並濟。',
     descHans: '红挺兵投石问路，黑方架卒底炮后发制人，刚柔并济。',
+    check: (h) => {
+      if (h.length !== 2) return false;
+      const redPawn = h[0].side === RED && h[0].to.r === 4 && (h[0].to.c === 2 || h[0].to.c === 6);
+      const blackCannon = h[1].side === BLACK && h[1].to.r === 7 && (h[1].to.c === 2 || h[1].to.c === 4 || h[1].to.c === 6);
+      return redPawn && blackCannon;
+    },
   },
   {
-    pattern: [
-      { side: RED, piece: 'P', to: [4, 2] },
-      { side: BLACK, piece: 'P', to: [5, 2] },
-    ],
+    length: 2,
     nameHant: '仙人指路對兵局',
     nameHans: '仙人指路对兵局',
     descHant: '雙方互挺三／七兵，爭奪開局主動權，考驗基本功與中局功力。',
     descHans: '双方互挺三／七兵，争夺开局主动权，考验基本功与中局功力。',
+    check: (h) => {
+      if (h.length !== 2) return false;
+      const redPawn = h[0].side === RED && h[0].to.r === 4 && (h[0].to.c === 2 || h[0].to.c === 6);
+      const blackPawn = h[1].side === BLACK && h[1].to.r === 5 && (h[1].to.c === 2 || h[1].to.c === 6);
+      return redPawn && blackPawn;
+    },
   },
   {
-    pattern: [
-      { side: RED, piece: 'P', to: [4, 2] },
-    ],
+    length: 1,
+    nameHant: '當頭炮（中炮局）',
+    nameHans: '当头炮（中炮局）',
+    descHant: '起手當頭炮，直逼黑方中卒與將門，鐵血進攻的主流定式。',
+    descHans: '起手当头炮，直逼黑方中卒与将门，铁血进攻的主流定式。',
+    check: (h) => {
+      if (h.length !== 1) return false;
+      return h[0].side === RED && h[0].to.r === 2 && h[0].to.c === 4;
+    },
+  },
+  {
+    length: 1,
     nameHant: '仙人指路（進兵局）',
     nameHans: '仙人指路（进兵局）',
     descHant: '挺兵投石問路，意圖活己方馬路、制約敵馬，戰術彈性極大。',
     descHans: '挺兵投石问路，意图活己方马路、制约敌马，战术弹性极大。',
+    check: (h) => {
+      if (h.length !== 1) return false;
+      return h[0].side === RED && h[0].to.r === 4 && (h[0].to.c === 2 || h[0].to.c === 6);
+    },
   },
   {
-    pattern: [
-      { side: RED, piece: 'B', to: [2, 4] },
-    ],
+    length: 1,
     nameHant: '飛相局',
     nameHans: '飞相局',
     descHant: '起手飛相加厚中防，以靜制動，後發制人，防守森嚴。',
     descHans: '起手飞相加厚中防，以静制动，后发制人，防守森严。',
+    check: (h) => {
+      if (h.length !== 1) return false;
+      return h[0].side === RED && h[0].to.r === 2 && h[0].to.c === 4 && (h[0].from ? (h[0].from.c === 2 || h[0].from.c === 6) : false);
+    },
   },
   {
-    pattern: [
-      { side: RED, piece: 'N', to: [2, 6] },
-    ],
+    length: 1,
     nameHant: '起馬局',
     nameHans: '起马局',
     descHant: '正馬先發制人，利於快速出車，不露聲色而暗蓄殺機。',
     descHans: '正马先发制人，利于快速出车，不露声色而暗蓄杀机。',
+    check: (h) => {
+      if (h.length !== 1) return false;
+      return h[0].side === RED && h[0].to.r === 2 && (h[0].to.c === 2 || h[0].to.c === 6) && (h[0].from ? (h[0].from.c === 1 || h[0].from.c === 7) : true);
+    },
   },
   {
-    pattern: [
-      { side: RED, piece: 'C', to: [2, 3] },
-    ],
+    length: 1,
     nameHant: '過宮炮',
     nameHans: '过宫炮',
     descHant: '炮過九宮集結兵力於一翼，攻守兼備，極具戰術變數。',
     descHans: '炮过九宫集结兵力于一翼，攻守兼备，极具战术变数。',
+    check: (h) => {
+      if (h.length !== 1) return false;
+      if (h[0].side !== RED || h[0].to.r !== 2) return false;
+      const fc = h[0].from ? h[0].from.c : (h[0].to.c === 3 ? 7 : 1);
+      return (fc === 7 && h[0].to.c === 3) || (fc === 1 && h[0].to.c === 5);
+    },
   },
   {
-    pattern: [
-      { side: RED, piece: 'C', to: [2, 5] },
-    ],
+    length: 1,
     nameHant: '士角炮',
     nameHans: '士角炮',
     descHant: '炮置士角，護衛中營同時遙控對角，冷箭暗藏。',
     descHans: '炮置士角，护卫中营同时遥控对角，冷箭暗藏。',
+    check: (h) => {
+      if (h.length !== 1) return false;
+      if (h[0].side !== RED || h[0].to.r !== 2) return false;
+      const fc = h[0].from ? h[0].from.c : (h[0].to.c === 5 ? 7 : 1);
+      return (fc === 7 && h[0].to.c === 5) || (fc === 1 && h[0].to.c === 3);
+    },
   },
 ];
 
 /**
- * 識別當前對局開局陣型
+ * 識別當前著法所剛達成的開局陣型
  */
 export function identifyOpening(history, lang = LANG_HANT) {
   if (!history || history.length === 0) return null;
   const h = history.slice(0, 8);
 
   for (const op of OPENINGS) {
-    if (op.pattern.length > h.length) continue;
-    let match = true;
-    for (let i = 0; i < op.pattern.length; i++) {
-      const p = op.pattern[i];
-      const m = h[i];
-      if (!m) { match = false; break; }
-      if (m.side !== p.side) { match = false; break; }
-      if (m.to.r !== p.to[0] || m.to.c !== p.to[1]) { match = false; break; }
-    }
-    if (match) {
+    if (op.length === h.length && op.check(h)) {
       return {
         name: lang === LANG_HANS ? op.nameHans : op.nameHant,
         desc: lang === LANG_HANS ? op.descHans : op.descHant,
@@ -238,6 +270,30 @@ export function generateCommentary({
   let title = '';
   let comment = '';
   let tag = 'TACTIC'; // 'OPENING' | 'CHECK' | 'CAPTURE' | 'DEFENSE' | 'ATTACK' | 'TACTIC'
+
+  // 0. 被將應將判定（此步前己方正處於被將狀態）
+  const wasChecked = inCheck(prevBoard, side);
+  if (wasChecked) {
+    tag = 'DEFENSE';
+    if (captured) {
+      const capName = PIECE_NAMES[lang][captured.side][captured.type] || captured.type;
+      title = isHans ? '【斩将解危】' : '【斬將解危】';
+      comment = isHans
+        ? `${sideName}${pName}果断斩落照将之${capName}，反戈一击化解将门危机！`
+        : `${sideName}${pName}果斷斬落照將之${capName}，反戈一擊化解將門危機！`;
+    } else if (pType === 'K') {
+      title = isHans ? '【将帅移驾】' : '【將帥移駕】';
+      comment = isHans
+        ? `${sideName}临危不乱，${pName}移步避开锋芒，沉着化解险情。`
+        : `${sideName}臨危不亂，${pName}移步避開鋒芒，沉著化解險情。`;
+    } else {
+      title = isHans ? '【垫子护驾】' : '【墊子護駕】';
+      comment = isHans
+        ? `${sideName}走出 ${nota} 挺身垫子，铜墙铁壁化解攻势！`
+        : `${sideName}走出 ${nota} 挺身墊子，銅牆鐵壁化解攻勢！`;
+    }
+    return { title, comment, tag, scoreText };
+  }
 
   // 1. 開局識別（前 6 回合）
   if (history.length <= 8) {
@@ -416,6 +472,15 @@ export function generateCommentary({
     return { title, comment, tag, scoreText };
   }
 
+  if (pType === 'K') {
+    tag = 'DEFENSE';
+    title = isHans ? '【将帅巡宫】' : '【將帥巡宮】';
+    comment = isHans
+      ? `${sideName}${pName}平稳挪步，调配九宫防守站位，伺机助攻！`
+      : `${sideName}${pName}平穩挪步，調配九宮防守站位，伺機助攻！`;
+    return { title, comment, tag, scoreText };
+  }
+
   return {
     title: isHans ? '【平稳行棋】' : '【平穩行棋】',
     comment: isHans ? `${sideName}走出 ${nota}，调配阵型，稳扎稳打。` : `${sideName}走出 ${nota}，調配陣型，穩紮穩打。`,
@@ -430,9 +495,10 @@ export function generateCommentary({
  * @param {string} side RED | BLACK
  * @param {string} lang zh-Hant | zh-Hans
  * @param {Array} history
+ * @param {Array} posHistory
  * @returns {{ from: object, to: object, nota: string, title: string, rationale: string, scoreText: string }}
  */
-export function getGuidance(board, side, lang = LANG_HANT, history = []) {
+export function getGuidance(board, side, lang = LANG_HANT, history = [], posHistory = []) {
   const isHans = lang === LANG_HANS;
   const sideName = side === RED ? (isHans ? '红方' : '紅方') : (isHans ? '黑方' : '黑方');
 
@@ -440,11 +506,26 @@ export function getGuidance(board, side, lang = LANG_HANT, history = []) {
   let move = getOpeningMove(board, side, 'hard');
   let isBook = false;
 
-  if (move) {
-    isBook = true;
-  } else {
+  if (move && move.from && move.to) {
+    const pieceAtFrom = board[move.from.r]?.[move.from.c];
+    if (pieceAtFrom && pieceAtFrom.side === side) {
+      const legals = legalMoves(board, move.from.r, move.from.c);
+      const isLegal = legals.some((m) => m.r === move.to.r && m.c === move.to.c);
+      if (isLegal) {
+        isBook = true;
+      } else {
+        move = null;
+      }
+    } else {
+      move = null;
+    }
+  }
+
+  if (!move) {
     // 2. 呼叫最強深度引擎搜尋最優著法
-    const recent = history.map((h) => h.posKey).filter(Boolean);
+    const recent = (posHistory && posHistory.length)
+      ? posHistory.slice(-16)
+      : history.map((h) => h.posKey).filter(Boolean);
     const result = findBestMove(board, side, 'hard', recent);
     if (result && result.from && result.to) {
       move = { from: result.from, to: result.to };

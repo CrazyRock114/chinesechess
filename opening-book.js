@@ -2,7 +2,7 @@
 // 中國象棋經典開局庫 (Opening Book)
 // 包含中炮對屏風馬、順手炮、反宮馬、仙人指路、飛相局、起馬局等大師定式
 // ============================================================
-import { initialBoard, applyMove, hashBoard, RED, BLACK } from './game.js?v=a5d20a54ea';
+import { initialBoard, applyMove, hashBoard, RED, BLACK } from './game.js?v=5630beac13';
 
 // 著法輔助工具：(r, c)
 const P = (r, c) => ({ r, c });
