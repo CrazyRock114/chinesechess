@@ -119,6 +119,7 @@ export const I18N = {
     riverHe: '河',
     riverHan: '漢',
     riverJie: '界',
+    credits: '鳴謝：Will 保哥',
     diffLabels: { easy: '簡單', medium: '中等', hard: '困難' },
   },
   [LANG_HANS]: {
@@ -234,6 +235,7 @@ export const I18N = {
     riverHe: '河',
     riverHan: '汉',
     riverJie: '界',
+    credits: '鸣谢：Will 保哥',
     diffLabels: { easy: '简单', medium: '中等', hard: '困难' },
   },
 };

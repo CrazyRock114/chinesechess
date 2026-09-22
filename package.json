@@ -22,5 +22,8 @@
     "opening-book"
   ],
   "author": "Will 保哥",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "edge-tts-universal": "^1.4.0"
+  }
 }

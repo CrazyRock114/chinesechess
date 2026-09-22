@@ -4,10 +4,10 @@
 // 支援繁體中文 (zh-Hant) 與簡體中文 (zh-Hans)
 // ============================================================
 
-import { RED, BLACK, inCheck, legalMoves, notation } from './game.js?v=40a83e61b5';
-import { evaluate, findBestMove } from './ai.js?v=40a83e61b5';
-import { getOpeningMove } from './opening-book.js?v=40a83e61b5';
-import { LANG_HANT, LANG_HANS } from './i18n.js?v=40a83e61b5';
+import { RED, BLACK, inCheck, legalMoves, notation } from './game.js?v=b511c30f1f';
+import { evaluate, findBestMove } from './ai.js?v=b511c30f1f';
+import { getOpeningMove } from './opening-book.js?v=b511c30f1f';
+import { LANG_HANT, LANG_HANS } from './i18n.js?v=b511c30f1f';
 
 // ---------------- 開局定式名庫 ----------------
 const OPENINGS = [
@@ -606,11 +606,16 @@ export function getGuidance(board, side, lang = LANG_HANS, history = [], posHist
 }
 
 /**
- * 瀏覽器語音解說播放 (Web Speech API)
- * 專為中國象棋棋評調校：優選專業男聲音色、深沉微低音 (pitch=0.86)、沉穩語速 (rate=0.95)
+/**
+ * 專業象棋 AI 語音解說播放
+ * 1. 優先使用服務端神經網路專業男聲 (Microsoft Yunyang / YunJhe Neural TTS)
+ *    音色渾厚、沉穩、字正腔圓，宛如央視國家級專業體育主播與象棋大師親臨現場解說。
+ * 2. 離線或網路異常時無縫降級至本地 Web Speech API，並深度排除滑稽卡通音色與人機女聲。
  */
 let synth = null;
 let currentUtterance = null;
+let currentAudio = null;
+let isAudioPlaying = false;
 let voiceEnabled = false;
 let speechResolvers = [];
 
@@ -623,7 +628,7 @@ function notifySpeechFinished() {
 }
 
 /**
- * 取得最佳的中文專業男聲語音
+ * 取得最佳的中文專業男聲語音（本地 Web Speech API 後備）
  */
 export function getPreferredVoice(lang = LANG_HANS) {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) return null;
@@ -633,17 +638,18 @@ export function getPreferredVoice(lang = LANG_HANS) {
   const isHans = lang === LANG_HANS;
   const targetLangPrefix = isHans ? 'zh-cn' : 'zh';
 
-  // 1. 知名專業自然男聲標籤（微軟雲揚/雲健/雲希、蘋果李木/柏霖/善治、Google普通話男聲等）
-  const maleKeywords = [
-    'yunyang', 'yunjian', 'yunxi', 'yunfeng',
-    'kangkang', 'li-mu', 'bo-lin', 'sin-ji', 'danny',
-    'male', '男', 'guy', 'breeze', 'george', 'alex',
+  // 知名專業自然男聲標籤（微軟雲揚/雲健/雲希、蘋果李木/柏霖等）
+  const preferredMaleKeywords = [
+    'yunyang', 'yunjian', 'yunxi', 'yunfeng', 'yunhao',
+    'kangkang', 'li-mu', 'bo-lin', 'danny',
   ];
 
-  // 2. 排除常見機械女聲音色
-  const femaleKeywords = [
+  // 排除滑稽/卡通/人機/女性音色
+  const excludedKeywords = [
+    'eddy', 'rocko', 'flo', 'sandy', 'shelley', 'grandma', 'grandpa',
     'tingting', 'ting-ting', 'xiaoyan', 'xiaoxuan', 'yuna', 'meijia', 'mei-jia',
-    'female', '女', 'xiaoyi', 'xiaohan', 'siri-female', 'kyoko', 'sin-ji-female',
+    'female', '女', 'xiaoyi', 'xiaohan', 'siri-female', 'kyoko', 'sin-ji', 'sinji',
+    'google', // Google 內建中文語音為單調人機女聲
   ];
 
   const zhVoices = voices.filter((v) => {
@@ -651,8 +657,8 @@ export function getPreferredVoice(lang = LANG_HANS) {
     return l.startsWith('zh') || l.includes('chinese') || l.includes('cmn') || l.includes('mandarin');
   });
 
-  // 第一優先：符合目標地區且命中專業男聲名
-  for (const kw of maleKeywords) {
+  // 第一優先：高保真自然男聲
+  for (const kw of preferredMaleKeywords) {
     const found = zhVoices.find((v) => {
       const n = (v.name || '').toLowerCase();
       const l = (v.lang || '').toLowerCase();
@@ -661,20 +667,19 @@ export function getPreferredVoice(lang = LANG_HANS) {
     if (found) return found;
   }
 
-  // 第二優先：排除女性關鍵字後的中文語音
-  const nonFemaleZh = zhVoices.filter((v) => {
+  // 第二優先：排除所有卡通和女性音色後的中文男聲
+  const cleanMaleZh = zhVoices.filter((v) => {
     const n = (v.name || '').toLowerCase();
-    return !femaleKeywords.some((fk) => n.includes(fk));
+    return !excludedKeywords.some((ek) => n.includes(ek));
   });
-  if (nonFemaleZh.length) {
-    const matchLang = nonFemaleZh.find((v) => (v.lang || '').toLowerCase().includes(targetLangPrefix));
+  if (cleanMaleZh.length) {
+    const matchLang = cleanMaleZh.find((v) => (v.lang || '').toLowerCase().includes(targetLangPrefix));
     if (matchLang) return matchLang;
-    return nonFemaleZh[0];
+    return cleanMaleZh[0];
   }
 
-  // 第三優先：後備中文語音
-  const fallback = zhVoices.find((v) => (v.lang || '').toLowerCase().includes(targetLangPrefix)) || zhVoices[0];
-  return fallback || null;
+  // 第三優先：後備
+  return zhVoices.find((v) => (v.lang || '').toLowerCase().includes(targetLangPrefix)) || zhVoices[0] || null;
 }
 
 export function isVoiceEnabled() {
@@ -682,6 +687,15 @@ export function isVoiceEnabled() {
 }
 
 export function cancelSpeech() {
+  if (currentAudio) {
+    try {
+      currentAudio.pause();
+      currentAudio.currentTime = 0;
+      currentAudio.src = '';
+    } catch {}
+    currentAudio = null;
+    isAudioPlaying = false;
+  }
   if (typeof window !== 'undefined' && ('speechSynthesis' in window)) {
     try { window.speechSynthesis.cancel(); } catch {}
   }
@@ -697,8 +711,11 @@ export function setVoiceEnabled(enabled) {
 }
 
 export function isSpeaking() {
-  if (typeof window === 'undefined' || !('speechSynthesis' in window)) return false;
-  return window.speechSynthesis.speaking || !!currentUtterance;
+  if (isAudioPlaying || currentAudio) return true;
+  if (typeof window !== 'undefined' && ('speechSynthesis' in window)) {
+    return window.speechSynthesis.speaking || !!currentUtterance;
+  }
+  return false;
 }
 
 /**
@@ -706,50 +723,41 @@ export function isSpeaking() {
  * 避免 AI 瞬間走子打斷玩家走法的語音播報
  */
 export function waitUntilSpeechFinished() {
-  if (!voiceEnabled || typeof window === 'undefined' || !('speechSynthesis' in window)) {
-    return Promise.resolve();
-  }
-  if (!window.speechSynthesis.speaking && !currentUtterance) {
-    return Promise.resolve();
-  }
+  if (!voiceEnabled) return Promise.resolve();
+  if (!isSpeaking()) return Promise.resolve();
 
   return new Promise((resolve) => {
     speechResolvers.push(resolve);
-    // 6.5 秒安全防呆超時，防止個別瀏覽器丟失 onend 事件造成死等
+    // 8 秒安全防呆超時，防止瀏覽器丟失 onended 事件造成死等
     setTimeout(() => {
       const idx = speechResolvers.indexOf(resolve);
       if (idx >= 0) {
         speechResolvers.splice(idx, 1);
         resolve();
       }
-    }, 6500);
+    }, 8000);
   });
 }
 
-export function speakCommentary(text, lang = LANG_HANS) {
-  if (!voiceEnabled || !text) {
-    notifySpeechFinished();
-    return;
-  }
+function speakViaSpeechSynthesis(cleanText, lang) {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
     notifySpeechFinished();
     return;
   }
-
   synth = window.speechSynthesis;
   try {
     synth.cancel();
-    notifySpeechFinished(); // 釋放上一句等待隊列
+    notifySpeechFinished();
 
-    const utter = new SpeechSynthesisUtterance(text);
+    const utter = new SpeechSynthesisUtterance(cleanText);
     utter.lang = lang === LANG_HANS ? 'zh-CN' : 'zh-TW';
 
     const preferredVoice = getPreferredVoice(lang);
     if (preferredVoice) utter.voice = preferredVoice;
 
-    // 沉穩、專業的象棋棋評聲調：深沉微低音 (0.86) 與從容語速 (0.95)
-    utter.pitch = 0.86;
-    utter.rate = 0.95;
+    // 深沉沉穩男聲參數：低音 (0.80) 與沉著語速 (0.92)
+    utter.pitch = 0.80;
+    utter.rate = 0.92;
 
     currentUtterance = utter;
 
@@ -764,8 +772,67 @@ export function speakCommentary(text, lang = LANG_HANS) {
 
     synth.speak(utter);
   } catch (e) {
-    console.warn('Speech synthesis failed:', e);
+    console.warn('Speech synthesis fallback failed:', e);
     currentUtterance = null;
     notifySpeechFinished();
   }
+}
+
+export function speakCommentary(text, lang = LANG_HANS) {
+  if (!voiceEnabled || !text) {
+    notifySpeechFinished();
+    return;
+  }
+
+  cancelSpeech();
+
+  // 清洗棋評文本中的標記符號，使語音播報流暢純粹
+  const cleanText = text
+    .replace(/【(.*?)】/g, '$1。')
+    .replace(/[⚡🎯✕🔊🔇📋]/g, '')
+    .replace(/（.*?）/g, '')
+    .trim();
+
+  if (!cleanText) {
+    notifySpeechFinished();
+    return;
+  }
+
+  // 1. 優先使用高保真神經網路男聲 (/api/tts)
+  if (typeof window !== 'undefined' && typeof window.Audio !== 'undefined') {
+    const ttsUrl = `/api/tts?text=${encodeURIComponent(cleanText)}&lang=${lang}`;
+    const audio = new Audio(ttsUrl);
+    currentAudio = audio;
+    isAudioPlaying = true;
+
+    audio.onended = () => {
+      if (currentAudio === audio) {
+        currentAudio = null;
+        isAudioPlaying = false;
+      }
+      notifySpeechFinished();
+    };
+
+    audio.onerror = (e) => {
+      console.warn('Neural TTS failed, falling back to Web Speech API:', e);
+      if (currentAudio === audio) {
+        currentAudio = null;
+        isAudioPlaying = false;
+      }
+      speakViaSpeechSynthesis(cleanText, lang);
+    };
+
+    audio.play().catch((playErr) => {
+      console.warn('Audio play prevented or failed, falling back to Web Speech API:', playErr);
+      if (currentAudio === audio) {
+        currentAudio = null;
+        isAudioPlaying = false;
+      }
+      speakViaSpeechSynthesis(cleanText, lang);
+    });
+    return;
+  }
+
+  // 2. 本地 Web Speech API
+  speakViaSpeechSynthesis(cleanText, lang);
 }

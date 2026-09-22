@@ -8,8 +8,8 @@ import {
   initialBoard, legalMoves, applyMove, inCheck,
   hasAnyLegalMove, name, notation, hashBoard, repetitionVerdict,
   toFEN, loadFEN,
-} from './game.js?v=40a83e61b5';
-import { LANG_HANT, LANG_HANS, I18N } from './i18n.js?v=40a83e61b5';
+} from './game.js?v=b511c30f1f';
+import { LANG_HANT, LANG_HANS, I18N } from './i18n.js?v=b511c30f1f';
 import {
   generateCommentary,
   getGuidance,
@@ -20,7 +20,7 @@ import {
   waitUntilSpeechFinished,
   cancelSpeech,
   isSpeaking,
-} from './commentary.js?v=40a83e61b5';
+} from './commentary.js?v=b511c30f1f';
 
 function loadLangPref() {
   try {
@@ -500,7 +500,7 @@ let aiMoveStart = 0;
 let aiWorker = null;
 let aiModule = null;   // Worker 不可用時的主執行緒後備
 try {
-  aiWorker = new Worker(new URL('./ai-worker.js?v=40a83e61b5', import.meta.url), { type: 'module' });
+  aiWorker = new Worker(new URL('./ai-worker.js?v=b511c30f1f', import.meta.url), { type: 'module' });
   aiWorker.onmessage = (e) => onAIResult(e.data);
   aiWorker.onerror = () => {
     aiWorker = null;
@@ -522,7 +522,7 @@ function requestAIMove() {
   if (aiWorker) {
     aiWorker.postMessage(payload);
   } else {
-    (aiModule ??= import('./ai.js?v=40a83e61b5')).then(({ findBestMove }) => {
+    (aiModule ??= import('./ai.js?v=b511c30f1f')).then(({ findBestMove }) => {
       setTimeout(() => {
         if (token !== aiToken) return;
         onAIResult({ token, result: findBestMove(payload.board, payload.side, payload.level, payload.recent) });
@@ -1895,6 +1895,8 @@ function updateUIStrings() {
   if (btnHintPlayEl) btnHintPlayEl.textContent = t('hintPlayBtn') + ' ⚡';
   const btnHintDismissEl = document.getElementById('btnHintDismiss');
   if (btnHintDismissEl) btnHintDismissEl.textContent = t('hintCloseBtn');
+  const footerCreditsEl = document.getElementById('footerCredits');
+  if (footerCreditsEl) footerCreditsEl.textContent = t('credits');
 }
 
 function setLanguage(lang) {
