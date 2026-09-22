@@ -8,8 +8,8 @@ import {
   initialBoard, legalMoves, applyMove, inCheck,
   hasAnyLegalMove, name, notation, hashBoard, repetitionVerdict,
   toFEN, loadFEN,
-} from './game.js?v=5630beac13';
-import { LANG_HANT, LANG_HANS, I18N } from './i18n.js?v=5630beac13';
+} from './game.js?v=40a83e61b5';
+import { LANG_HANT, LANG_HANS, I18N } from './i18n.js?v=40a83e61b5';
 import {
   generateCommentary,
   getGuidance,
@@ -17,20 +17,23 @@ import {
   isVoiceEnabled,
   setVoiceEnabled,
   formatScore,
-} from './commentary.js?v=5630beac13';
+  waitUntilSpeechFinished,
+  cancelSpeech,
+  isSpeaking,
+} from './commentary.js?v=40a83e61b5';
 
 function loadLangPref() {
   try {
     const saved = localStorage.getItem('xiangqi.lang');
     if (saved === LANG_HANT || saved === LANG_HANS) return saved;
-    if (navigator.language && (navigator.language.startsWith('zh-CN') || navigator.language.startsWith('zh-Hans'))) {
-      return LANG_HANS;
+    if (navigator.language && (navigator.language.startsWith('zh-TW') || navigator.language.startsWith('zh-HK') || navigator.language.startsWith('zh-Hant'))) {
+      return LANG_HANT;
     }
   } catch {}
-  return LANG_HANT;
+  return LANG_HANS; // 默認語言為簡體中文
 }
 let currentLang = loadLangPref();
-const t = (k) => (I18N[currentLang] || I18N[LANG_HANT])[k] ?? k;
+const t = (k) => (I18N[currentLang] || I18N[LANG_HANS])[k] ?? k;
 
 // ---------------- 常數 ----------------
 const CELL = 1;
@@ -497,7 +500,7 @@ let aiMoveStart = 0;
 let aiWorker = null;
 let aiModule = null;   // Worker 不可用時的主執行緒後備
 try {
-  aiWorker = new Worker(new URL('./ai-worker.js?v=5630beac13', import.meta.url), { type: 'module' });
+  aiWorker = new Worker(new URL('./ai-worker.js?v=40a83e61b5', import.meta.url), { type: 'module' });
   aiWorker.onmessage = (e) => onAIResult(e.data);
   aiWorker.onerror = () => {
     aiWorker = null;
@@ -519,7 +522,7 @@ function requestAIMove() {
   if (aiWorker) {
     aiWorker.postMessage(payload);
   } else {
-    (aiModule ??= import('./ai.js?v=5630beac13')).then(({ findBestMove }) => {
+    (aiModule ??= import('./ai.js?v=40a83e61b5')).then(({ findBestMove }) => {
       setTimeout(() => {
         if (token !== aiToken) return;
         onAIResult({ token, result: findBestMove(payload.board, payload.side, payload.level, payload.recent) });
@@ -539,9 +542,8 @@ function maybeAIMove() {
 function onAIResult({ token, result, error }) {
   if (token !== aiToken) return;
   if (error || !result) { aiThinking = false; refreshHUD(); return; }
-  // 至少顯示一小段「思考中」，節奏比較自然
-  const wait = Math.max(0, 500 - (performance.now() - aiMoveStart));
-  setTimeout(() => {
+
+  const executeAIMove = () => {
     if (token !== aiToken) return;
     aiThinking = false;
     if (over || busy || turn !== AI_SIDE) { refreshHUD(); return; }
@@ -551,6 +553,21 @@ function onAIResult({ token, result, error }) {
       legalMoves(board, from.r, from.c).some((m) => m.r === to.r && m.c === to.c);
     if (!ok) { refreshHUD(); return; }
     doMove(from, to);
+  };
+
+  // 至少顯示一小段「思考中」，節奏比較自然
+  const wait = Math.max(0, 500 - (performance.now() - aiMoveStart));
+  setTimeout(async () => {
+    if (token !== aiToken) return;
+    if (isVoiceEnabled()) {
+      // 若開啟語音解說：等待玩家走法語音完全播報完畢，避免 AI 瞬間落子打斷語音
+      await waitUntilSpeechFinished();
+      if (token !== aiToken) return;
+      // 語音結束後留白 350ms，讓棋評聽完後再看見 AI 從容落子
+      setTimeout(executeAIMove, 350);
+    } else {
+      executeAIMove();
+    }
   }, wait);
 }
 
@@ -604,6 +621,11 @@ const hintModal = document.getElementById('hintModal');
 const btnHintClose = document.getElementById('btnHintClose');
 const btnHintDismiss = document.getElementById('btnHintDismiss');
 const btnHintPlay = document.getElementById('btnHintPlay');
+const hintLoading = document.getElementById('hintLoading');
+const hintLoadingTitle = document.getElementById('hintLoadingTitle');
+const hintLoadingSub = document.getElementById('hintLoadingSub');
+const hintBody = document.getElementById('hintBody');
+const hintActions = document.getElementById('hintActions');
 const hintMoveText = document.getElementById('hintMoveText');
 const hintTacticTitle = document.getElementById('hintTacticTitle');
 const hintRationale = document.getElementById('hintRationale');
@@ -733,24 +755,59 @@ function openHint() {
     showToast(t('hintWaitingAI'));
     return;
   }
+  if (btnHint?.classList.contains('calculating')) return;
 
-  const hint = getGuidance(board, turn, currentLang, history, posHistory);
-  if (!hint) {
-    showToast(t('hintNoMove'));
-    return;
-  }
+  // 1. 立即進入推演計算狀態，按鈕展示呼吸效果，彈窗展示旋轉光環動畫
+  btnHint?.classList.add('calculating');
+  const origBtnText = btnHint ? btnHint.textContent : '';
+  if (btnHint) btnHint.textContent = t('hintCalculating');
 
-  currentHint = hint;
-  if (hintMoveText) hintMoveText.textContent = hint.nota;
-  if (hintTacticTitle) hintTacticTitle.textContent = hint.title;
-  if (hintRationale) hintRationale.textContent = hint.rationale;
-  if (hintScoreText) hintScoreText.textContent = hint.scoreText;
+  if (hintLoadingTitle) hintLoadingTitle.textContent = t('hintLoadingTitle');
+  if (hintLoadingSub) hintLoadingSub.textContent = t('hintLoadingSub');
+
+  if (hintLoading) hintLoading.classList.remove('hidden');
+  if (hintBody) hintBody.classList.add('hidden');
+  if (hintActions) hintActions.classList.add('hidden');
   if (hintModal) hintModal.classList.remove('hidden');
 
-  showHintMarkers(hint.from, hint.to);
+  // 2. 透過微延遲讓瀏覽器先繪製彈窗旋轉動畫，再調用引擎深度推演
+  setTimeout(() => {
+    try {
+      const hint = getGuidance(board, turn, currentLang, history, posHistory);
+      btnHint?.classList.remove('calculating');
+      if (btnHint) btnHint.textContent = origBtnText;
+
+      if (!hint) {
+        closeHint();
+        showToast(t('hintNoMove'));
+        return;
+      }
+
+      currentHint = hint;
+      if (hintMoveText) hintMoveText.textContent = hint.nota;
+      if (hintTacticTitle) hintTacticTitle.textContent = hint.title;
+      if (hintRationale) hintRationale.textContent = hint.rationale;
+      if (hintScoreText) hintScoreText.textContent = hint.scoreText;
+
+      if (hintLoading) hintLoading.classList.add('hidden');
+      if (hintBody) hintBody.classList.remove('hidden');
+      if (hintActions) hintActions.classList.remove('hidden');
+
+      showHintMarkers(hint.from, hint.to);
+    } catch (err) {
+      console.error('Hint calculation failed:', err);
+      btnHint?.classList.remove('calculating');
+      if (btnHint) btnHint.textContent = origBtnText;
+      closeHint();
+      showToast(t('hintNoMove'));
+    }
+  }, 60);
 }
 
 function closeHint() {
+  btnHint?.classList.remove('calculating');
+  const btnHintEl = document.getElementById('btnHint');
+  if (btnHintEl) btnHintEl.textContent = t('hintBtn');
   if (hintModal) hintModal.classList.add('hidden');
   hideHintMarkers();
 }
@@ -868,6 +925,7 @@ function buildScene() {
 }
 
 function newGame() {
+  cancelSpeech();
   tweens.length = 0;
   aiToken++;
   aiThinking = false;
@@ -898,6 +956,7 @@ function newGame() {
 
 /** 測試用：直接佈局 */
 function resetTo(customBoard, turnSide) {
+  cancelSpeech();
   tweens.length = 0;
   aiToken++;
   aiThinking = false;
@@ -1086,6 +1145,7 @@ function undoPly() {
 
 function undo() {
   if (!history.length || busy || aiThinking) return;
+  cancelSpeech();
   undoCount++;
   aiToken++; // 作廢進行中的 AI 計算
   undoPly();

@@ -4,10 +4,10 @@
 // 支援繁體中文 (zh-Hant) 與簡體中文 (zh-Hans)
 // ============================================================
 
-import { RED, BLACK, inCheck, legalMoves, notation } from './game.js?v=5630beac13';
-import { evaluate, findBestMove } from './ai.js?v=5630beac13';
-import { getOpeningMove } from './opening-book.js?v=5630beac13';
-import { LANG_HANT, LANG_HANS } from './i18n.js?v=5630beac13';
+import { RED, BLACK, inCheck, legalMoves, notation } from './game.js?v=40a83e61b5';
+import { evaluate, findBestMove } from './ai.js?v=40a83e61b5';
+import { getOpeningMove } from './opening-book.js?v=40a83e61b5';
+import { LANG_HANT, LANG_HANS } from './i18n.js?v=40a83e61b5';
 
 // ---------------- 開局定式名庫 ----------------
 const OPENINGS = [
@@ -173,7 +173,7 @@ const OPENINGS = [
 /**
  * 識別當前著法所剛達成的開局陣型
  */
-export function identifyOpening(history, lang = LANG_HANT) {
+export function identifyOpening(history, lang = LANG_HANS) {
   if (!history || history.length === 0) return null;
   const h = history.slice(0, 8);
 
@@ -191,7 +191,7 @@ export function identifyOpening(history, lang = LANG_HANT) {
 /**
  * 評估局勢優勢文字
  */
-export function formatScore(score, lang = LANG_HANT) {
+export function formatScore(score, lang = LANG_HANS) {
   // score 為紅方視角，以 20 分 ≈ 1 兵為單位基準
   const pawns = score / 20;
   const isHans = lang === LANG_HANS;
@@ -249,7 +249,7 @@ export function generateCommentary({
   side,
   captured,
   history = [],
-  lang = LANG_HANT,
+  lang = LANG_HANS,
 }) {
   const isHans = lang === LANG_HANS;
   const sideName = side === RED ? (isHans ? '红方' : '紅方') : (isHans ? '黑方' : '黑方');
@@ -498,7 +498,7 @@ export function generateCommentary({
  * @param {Array} posHistory
  * @returns {{ from: object, to: object, nota: string, title: string, rationale: string, scoreText: string }}
  */
-export function getGuidance(board, side, lang = LANG_HANT, history = [], posHistory = []) {
+export function getGuidance(board, side, lang = LANG_HANS, history = [], posHistory = []) {
   const isHans = lang === LANG_HANS;
   const sideName = side === RED ? (isHans ? '红方' : '紅方') : (isHans ? '黑方' : '黑方');
 
@@ -607,36 +607,165 @@ export function getGuidance(board, side, lang = LANG_HANT, history = [], posHist
 
 /**
  * 瀏覽器語音解說播放 (Web Speech API)
+ * 專為中國象棋棋評調校：優選專業男聲音色、深沉微低音 (pitch=0.86)、沉穩語速 (rate=0.95)
  */
 let synth = null;
 let currentUtterance = null;
 let voiceEnabled = false;
+let speechResolvers = [];
+
+function notifySpeechFinished() {
+  const resolvers = speechResolvers.slice();
+  speechResolvers = [];
+  for (const resolve of resolvers) {
+    try { resolve(); } catch {}
+  }
+}
+
+/**
+ * 取得最佳的中文專業男聲語音
+ */
+export function getPreferredVoice(lang = LANG_HANS) {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) return null;
+  const voices = window.speechSynthesis.getVoices();
+  if (!voices || !voices.length) return null;
+
+  const isHans = lang === LANG_HANS;
+  const targetLangPrefix = isHans ? 'zh-cn' : 'zh';
+
+  // 1. 知名專業自然男聲標籤（微軟雲揚/雲健/雲希、蘋果李木/柏霖/善治、Google普通話男聲等）
+  const maleKeywords = [
+    'yunyang', 'yunjian', 'yunxi', 'yunfeng',
+    'kangkang', 'li-mu', 'bo-lin', 'sin-ji', 'danny',
+    'male', '男', 'guy', 'breeze', 'george', 'alex',
+  ];
+
+  // 2. 排除常見機械女聲音色
+  const femaleKeywords = [
+    'tingting', 'ting-ting', 'xiaoyan', 'xiaoxuan', 'yuna', 'meijia', 'mei-jia',
+    'female', '女', 'xiaoyi', 'xiaohan', 'siri-female', 'kyoko', 'sin-ji-female',
+  ];
+
+  const zhVoices = voices.filter((v) => {
+    const l = (v.lang || '').toLowerCase();
+    return l.startsWith('zh') || l.includes('chinese') || l.includes('cmn') || l.includes('mandarin');
+  });
+
+  // 第一優先：符合目標地區且命中專業男聲名
+  for (const kw of maleKeywords) {
+    const found = zhVoices.find((v) => {
+      const n = (v.name || '').toLowerCase();
+      const l = (v.lang || '').toLowerCase();
+      return (l.includes(targetLangPrefix) || l.startsWith('zh')) && n.includes(kw);
+    });
+    if (found) return found;
+  }
+
+  // 第二優先：排除女性關鍵字後的中文語音
+  const nonFemaleZh = zhVoices.filter((v) => {
+    const n = (v.name || '').toLowerCase();
+    return !femaleKeywords.some((fk) => n.includes(fk));
+  });
+  if (nonFemaleZh.length) {
+    const matchLang = nonFemaleZh.find((v) => (v.lang || '').toLowerCase().includes(targetLangPrefix));
+    if (matchLang) return matchLang;
+    return nonFemaleZh[0];
+  }
+
+  // 第三優先：後備中文語音
+  const fallback = zhVoices.find((v) => (v.lang || '').toLowerCase().includes(targetLangPrefix)) || zhVoices[0];
+  return fallback || null;
+}
 
 export function isVoiceEnabled() {
   return voiceEnabled;
 }
 
+export function cancelSpeech() {
+  if (typeof window !== 'undefined' && ('speechSynthesis' in window)) {
+    try { window.speechSynthesis.cancel(); } catch {}
+  }
+  currentUtterance = null;
+  notifySpeechFinished();
+}
+
 export function setVoiceEnabled(enabled) {
   voiceEnabled = enabled;
-  if (!enabled && synth) {
-    try { synth.cancel(); } catch {}
+  if (!enabled) {
+    cancelSpeech();
   }
 }
 
-export function speakCommentary(text, lang = LANG_HANT) {
-  if (!voiceEnabled || !text) return;
-  if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+export function isSpeaking() {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) return false;
+  return window.speechSynthesis.speaking || !!currentUtterance;
+}
+
+/**
+ * 當開啟語音解說時，供 AI 落子前非同步等待語音解說結束
+ * 避免 AI 瞬間走子打斷玩家走法的語音播報
+ */
+export function waitUntilSpeechFinished() {
+  if (!voiceEnabled || typeof window === 'undefined' || !('speechSynthesis' in window)) {
+    return Promise.resolve();
+  }
+  if (!window.speechSynthesis.speaking && !currentUtterance) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => {
+    speechResolvers.push(resolve);
+    // 6.5 秒安全防呆超時，防止個別瀏覽器丟失 onend 事件造成死等
+    setTimeout(() => {
+      const idx = speechResolvers.indexOf(resolve);
+      if (idx >= 0) {
+        speechResolvers.splice(idx, 1);
+        resolve();
+      }
+    }, 6500);
+  });
+}
+
+export function speakCommentary(text, lang = LANG_HANS) {
+  if (!voiceEnabled || !text) {
+    notifySpeechFinished();
+    return;
+  }
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+    notifySpeechFinished();
+    return;
+  }
 
   synth = window.speechSynthesis;
   try {
-    synth.cancel(); // 停止上一句避免語音堆疊
+    synth.cancel();
+    notifySpeechFinished(); // 釋放上一句等待隊列
+
     const utter = new SpeechSynthesisUtterance(text);
     utter.lang = lang === LANG_HANS ? 'zh-CN' : 'zh-TW';
-    utter.rate = 1.05; // 稍微輕快的解說節奏
-    utter.pitch = 1.0;
+
+    const preferredVoice = getPreferredVoice(lang);
+    if (preferredVoice) utter.voice = preferredVoice;
+
+    // 沉穩、專業的象棋棋評聲調：深沉微低音 (0.86) 與從容語速 (0.95)
+    utter.pitch = 0.86;
+    utter.rate = 0.95;
+
     currentUtterance = utter;
+
+    utter.onend = () => {
+      if (currentUtterance === utter) currentUtterance = null;
+      notifySpeechFinished();
+    };
+    utter.onerror = () => {
+      if (currentUtterance === utter) currentUtterance = null;
+      notifySpeechFinished();
+    };
+
     synth.speak(utter);
   } catch (e) {
     console.warn('Speech synthesis failed:', e);
+    currentUtterance = null;
+    notifySpeechFinished();
   }
 }

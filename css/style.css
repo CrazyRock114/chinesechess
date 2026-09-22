@@ -697,6 +697,49 @@ aside h3 {
   border-radius: 999px;
   letter-spacing: 1px;
 }
+#btnHint.calculating {
+  opacity: 0.88;
+  cursor: wait;
+  pointer-events: none;
+  background: linear-gradient(180deg, #d9a441, #966718);
+  box-shadow: 0 0 14px rgba(217, 164, 65, 0.5);
+}
+.hintLoading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 30px 16px 26px;
+  text-align: center;
+  animation: fadein 0.25s ease both;
+}
+.hintSpinner {
+  width: 48px;
+  height: 48px;
+  border: 3px solid rgba(217, 164, 65, 0.22);
+  border-top-color: var(--gold);
+  border-right-color: #fce79a;
+  border-radius: 50%;
+  animation: hintRotate 0.85s cubic-bezier(0.5, 0.1, 0.5, 0.9) infinite;
+  margin-bottom: 18px;
+  box-shadow: 0 0 20px rgba(217, 164, 65, 0.35);
+}
+@keyframes hintRotate {
+  to { transform: rotate(360deg); }
+}
+.hintLoadingTitle {
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+}
+.hintLoadingSub {
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.5;
+  margin: 0;
+}
 .hintMoveWrap {
   background: var(--panel2);
   border: 1px solid var(--line);
